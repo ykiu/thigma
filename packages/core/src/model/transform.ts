@@ -1,4 +1,4 @@
-import type { InterpreterEvent, StoreAction } from "../types.js";
+import type { StoreAction } from "../types.js";
 import {
   type LinearPrimitive,
   type ExponentialPrimitive,
@@ -36,40 +36,10 @@ export type TransformPrivateState =
   | { type: "snapping"; transform: Transform; target: TransformSnapTarget }
   | { type: "settled"; transform: Transform };
 
-type MotionEvent = Extract<InterpreterEvent, { type: "motion" }>;
-
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
 const LOG_VELOCITY_THRESHOLD = 0.0001; // log-units/ms
-
-function applyMotion(
-  transform: Transform,
-  motion: MotionEvent,
-  bounds?: TransformConfig["bounds"],
-): Transform {
-  const { dx, dy, dScale, originX, originY, timestamp } = motion;
-  const tx = transform.x.value;
-  const ty = transform.y.value;
-  const newScale = transform.scale.value * dScale;
-
-  const proposedTx = originX + (tx - originX) * dScale + dx;
-  const proposedTy = originY + (ty - originY) * dScale + dy;
-
-  let clampedTx = proposedTx;
-  let clampedTy = proposedTy;
-  if (bounds) {
-    const b = bounds(newScale);
-    clampedTx = Math.max(b.minX, Math.min(b.maxX, proposedTx));
-    clampedTy = Math.max(b.minY, Math.min(b.maxY, proposedTy));
-  }
-
-  return {
-    x: applyLinearDelta(transform.x, clampedTx - tx, timestamp),
-    y: applyLinearDelta(transform.y, clampedTy - ty, timestamp),
-    scale: applyExponentialFactor(transform.scale, dScale, timestamp),
-  };
-}
 
 function hasSignificantVelocity(transform: Transform): boolean {
   return (
@@ -158,11 +128,44 @@ export function createTransformReduce(config?: TransformConfig) {
     switch (state.type) {
       case "tracking": {
         switch (action.type) {
-          case "motion":
+          case "motion": {
+            const { dx, dy, dScale, originX, originY, timestamp } = action;
+            const tx = state.transform.x.value;
+            const ty = state.transform.y.value;
+            const newScale = state.transform.scale.value * dScale;
+
+            const proposedTx = originX + (tx - originX) * dScale + dx;
+            const proposedTy = originY + (ty - originY) * dScale + dy;
+
+            let clampedTx = proposedTx;
+            let clampedTy = proposedTy;
+            if (bounds) {
+              const b = bounds(newScale);
+              clampedTx = Math.max(b.minX, Math.min(b.maxX, proposedTx));
+              clampedTy = Math.max(b.minY, Math.min(b.maxY, proposedTy));
+            }
+
             return {
-              ...state,
-              transform: applyMotion(state.transform, action, bounds),
+              type: "tracking",
+              transform: {
+                x: applyLinearDelta(
+                  state.transform.x,
+                  clampedTx - tx,
+                  timestamp,
+                ),
+                y: applyLinearDelta(
+                  state.transform.y,
+                  clampedTy - ty,
+                  timestamp,
+                ),
+                scale: applyExponentialFactor(
+                  state.transform.scale,
+                  dScale,
+                  timestamp,
+                ),
+              },
             };
+          }
           case "release": {
             if (snapTarget) {
               const target = snapTarget(state.transform);
@@ -187,7 +190,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
-              transform: applyMotion(state.transform, action, bounds),
+              transform: state.transform,
             };
           case "release": {
             if (snapTarget) {
@@ -232,7 +235,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
-              transform: applyMotion(state.transform, action, bounds),
+              transform: state.transform,
             };
           case "release":
             return state;
@@ -241,10 +244,7 @@ export function createTransformReduce(config?: TransformConfig) {
             if (isSnapSettled(state.transform, target)) {
               return {
                 type: "settled",
-                transform: settleAtTarget(
-                  target,
-                  action.timestamp,
-                ),
+                transform: settleAtTarget(target, action.timestamp),
               };
             }
             return {
@@ -264,7 +264,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
-              transform: applyMotion(state.transform, action, bounds),
+              transform: state.transform,
             };
           case "release":
             return state;

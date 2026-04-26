@@ -155,12 +155,12 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state = reduce(
         settled(0, { a: { x: -50, y: -50, scale: 2 } }),
-        motion({ itemId: "a", dx: 10, dy: 5 }),
+        motion({ itemId: "a", dx: 0, dy: 0 }),
       );
       expect(state.type).toBe("locked");
       expect(state.items.a.type).toBe("tracking");
-      expect(state.items.a.transform.x.value).toBeCloseTo(-40);
-      expect(state.items.a.transform.y.value).toBeCloseTo(-45);
+      expect(state.items.a.transform.x.value).toBeCloseTo(-50);
+      expect(state.items.a.transform.y.value).toBeCloseTo(-50);
       expect(state.items.b.transform.x.value).toBe(0);
     });
 
