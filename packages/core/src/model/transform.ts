@@ -58,7 +58,6 @@ export type TransformPrivateState =
       scale: ExponentialPrimitive;
     };
 
-type InertiaState = Extract<TransformPrivateState, { type: "inertia" }>;
 type SnappingState = Extract<TransformPrivateState, { type: "snapping" }>;
 
 const SNAP_THRESHOLD = 0.5; // px
@@ -76,43 +75,6 @@ function hasSignificantVelocity(state: {
     Math.abs(state.y.velocity) > VELOCITY_THRESHOLD ||
     Math.abs(state.scale.logVelocity) > LOG_VELOCITY_THRESHOLD
   );
-}
-
-function advanceInertia(state: InertiaState, timestamp: number): InertiaState {
-  const oldScale = state.scale.value;
-  const newScale = advanceExponentialInertia(state.scale, timestamp);
-  const ds = newScale.value / oldScale;
-
-  const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
-  const retainedFactor = 0.99 ** dtMs;
-  const newVx = state.x.velocity * retainedFactor;
-  const newVy = state.y.velocity * retainedFactor;
-
-  return {
-    ...state,
-    x: {
-      value:
-        state.origin.x + (state.x.value - state.origin.x) * ds + newVx * dtMs,
-      velocity: newVx,
-      lastUpdatedAt: timestamp,
-    },
-    y: {
-      value:
-        state.origin.y + (state.y.value - state.origin.y) * ds + newVy * dtMs,
-      velocity: newVy,
-      lastUpdatedAt: timestamp,
-    },
-    scale: newScale,
-  };
-}
-
-function advanceSpring(state: SnappingState, timestamp: number): SnappingState {
-  return {
-    ...state,
-    x: advanceLinearSpring(state.x, state.target.x, timestamp),
-    y: advanceLinearSpring(state.y, state.target.y, timestamp),
-    scale: advanceExponentialSpring(state.scale, state.target.scale, timestamp),
-  };
 }
 
 function isSnapSettled(state: SnappingState): boolean {
@@ -255,8 +217,41 @@ export function createTransformReduce(config?: TransformConfig) {
             return settleTransform(state);
           }
           case "tick": {
+            const timestamp = action.timestamp;
             if (hasSignificantVelocity(state)) {
-              return advanceInertia(state, action.timestamp);
+              // Advance inertia
+              const oldScale = state.scale.value;
+              const newScale = advanceExponentialInertia(
+                state.scale,
+                timestamp,
+              );
+              const ds = newScale.value / oldScale;
+
+              const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
+              const retainedFactor = 0.99 ** dtMs;
+              const newVx = state.x.velocity * retainedFactor;
+              const newVy = state.y.velocity * retainedFactor;
+
+              return {
+                ...state,
+                x: {
+                  value:
+                    state.origin.x +
+                    (state.x.value - state.origin.x) * ds +
+                    newVx * dtMs,
+                  velocity: newVx,
+                  lastUpdatedAt: timestamp,
+                },
+                y: {
+                  value:
+                    state.origin.y +
+                    (state.y.value - state.origin.y) * ds +
+                    newVy * dtMs,
+                  velocity: newVy,
+                  lastUpdatedAt: timestamp,
+                },
+                scale: newScale,
+              };
             }
             if (snapTarget) {
               const target = snapTarget(state);
@@ -295,7 +290,16 @@ export function createTransformReduce(config?: TransformConfig) {
             if (isSnapSettled(state)) {
               return settleAtTarget(state.target, action.timestamp);
             }
-            return advanceSpring(state, action.timestamp);
+            return {
+              ...state,
+              x: advanceLinearSpring(state.x, state.target.x, action.timestamp),
+              y: advanceLinearSpring(state.y, state.target.y, action.timestamp),
+              scale: advanceExponentialSpring(
+                state.scale,
+                state.target.scale,
+                action.timestamp,
+              ),
+            };
           }
         }
         throw new Error("unreachable");
