@@ -1,13 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { createModel, type TransformPrivateState } from "../index.js";
+import {
+  createTransformReduce,
+  type TransformPrivateState,
+} from "../transform.js";
 import {
   createLinearPrimitive,
   createExponentialPrimitive,
 } from "../primitives.js";
-
-function makeReduce(config?: Parameters<typeof createModel>[0]) {
-  return createModel(config).reduce;
-}
 
 function makeTransform(x = 0, y = 0, scale = 1) {
   return {
@@ -25,10 +24,10 @@ function makeTransformWithVelocity(vx = 0, vy = 0, x = 0, y = 0) {
   };
 }
 
-describe("createModel", () => {
+describe("createTransformReduce", () => {
   describe("initial state", () => {
     it("returns settled state with zero transform when called with undefined", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(undefined, { type: "tick", timestamp: 0 });
       expect(state.type).toBe("settled");
       expect(state.x.value).toBe(0);
@@ -39,7 +38,7 @@ describe("createModel", () => {
 
   describe("settled state", () => {
     it("transitions to tracking on motion", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         { type: "settled", ...makeTransform() },
         {
@@ -56,7 +55,7 @@ describe("createModel", () => {
     });
 
     it("stays settled on tick", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         { type: "settled", ...makeTransform() },
         { type: "tick", timestamp: 16 },
@@ -65,7 +64,7 @@ describe("createModel", () => {
     });
 
     it("stays settled on release", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         { type: "settled", ...makeTransform() },
         { type: "release" },
@@ -76,7 +75,7 @@ describe("createModel", () => {
 
   describe("tracking state", () => {
     it("stays tracking on motion", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "tracking",
@@ -97,7 +96,7 @@ describe("createModel", () => {
     });
 
     it("applies translation delta to transform", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "tracking",
@@ -119,7 +118,7 @@ describe("createModel", () => {
     });
 
     it("adjusts translation for scale origin", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       // Zoom 2x at (100, 100) from (0, 0)
       // newTx = 100 + (0 - 100) * 2 + 0 = -100
       // newTy = 100 + (0 - 100) * 2 + 0 = -100
@@ -145,7 +144,7 @@ describe("createModel", () => {
     });
 
     it("transitions to inertia on release", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "tracking",
@@ -158,7 +157,7 @@ describe("createModel", () => {
     });
 
     it("transitions to snapping on release with snap", () => {
-      const reduce = makeReduce({
+      const reduce = createTransformReduce({
         snapTarget: (t) => ({
           x: Math.round(t.x.value / 100) * 100,
           y: t.y.value,
@@ -180,7 +179,7 @@ describe("createModel", () => {
     });
 
     it("stays tracking on tick", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "tracking",
@@ -195,7 +194,7 @@ describe("createModel", () => {
 
   describe("inertia state", () => {
     it("transitions to tracking on motion", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "inertia",
@@ -216,7 +215,7 @@ describe("createModel", () => {
     });
 
     it("advances inertia on tick when velocity is significant", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const before = {
         type: "inertia" as const,
         origin: { x: 0, y: 0 },
@@ -228,7 +227,7 @@ describe("createModel", () => {
     });
 
     it("transitions to settled on tick when velocity is negligible", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "inertia",
@@ -241,7 +240,7 @@ describe("createModel", () => {
     });
 
     it("transitions to settled on release", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(
         {
           type: "inertia",
@@ -254,7 +253,7 @@ describe("createModel", () => {
     });
 
     it("transitions to snapping on release with snap", () => {
-      const reduce = makeReduce({
+      const reduce = createTransformReduce({
         snapTarget: (t) => ({
           x: Math.round(t.x.value / 100) * 100,
           y: t.y.value,
@@ -286,7 +285,7 @@ describe("createModel", () => {
     }
 
     it("transitions to tracking on motion", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(makeSnappingState(60, 100), {
         type: "motion",
         timestamp: 0,
@@ -300,13 +299,13 @@ describe("createModel", () => {
     });
 
     it("stays snapping on release", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const state = reduce(makeSnappingState(60, 100), { type: "release" });
       expect(state.type).toBe("snapping");
     });
 
     it("advances spring toward target on tick when far", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const after = reduce(makeSnappingState(60, 100), {
         type: "tick",
         timestamp: 16,
@@ -317,7 +316,7 @@ describe("createModel", () => {
     });
 
     it("transitions to settled when within snap threshold", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       const after = reduce(makeSnappingState(99.9, 100), {
         type: "tick",
         timestamp: 16,
@@ -327,7 +326,7 @@ describe("createModel", () => {
     });
 
     it("converges to snap target over many frames", () => {
-      const reduce = makeReduce();
+      const reduce = createTransformReduce();
       let state: TransformPrivateState = makeSnappingState(0, 100);
       for (let i = 1; i <= 200; i++) {
         state = reduce(state, { type: "tick", timestamp: i * 16 });
