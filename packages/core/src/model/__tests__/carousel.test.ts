@@ -42,12 +42,17 @@ function makeInertiaItem(
 ): TransformPrivateState {
   return {
     type: "inertia",
+    origin: { x: 0, y: 0 },
     transform: makeItemTransform(x, y, scale, velocity),
   };
 }
 
 function makeTrackingItem(x = 0, y = 0, scale = 1): TransformPrivateState {
-  return { type: "tracking", transform: makeItemTransform(x, y, scale) };
+  return {
+    type: "tracking",
+    origin: { x: 0, y: 0 },
+    transform: makeItemTransform(x, y, scale),
+  };
 }
 
 function settled(
@@ -402,7 +407,11 @@ describe("createCarouselModel", () => {
         type: "locked",
         carousel: { value: 0, velocity: 0, lastUpdatedAt: 0 },
         items: {
-          a: { type: "tracking", transform: makeItemTransform(-50, 0, 2, -5) },
+          a: {
+            type: "tracking",
+            origin: { x: 0, y: 0 },
+            transform: makeItemTransform(-50, 0, 2, -5),
+          },
           b: makeSettledItem(),
           c: makeSettledItem(),
         },

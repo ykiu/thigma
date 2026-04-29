@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   createLinearPrimitive,
   applyLinearDelta,
-  advanceLinearInertia,
   advanceLinearSpring,
   createExponentialPrimitive,
   applyExponentialFactor,
@@ -24,21 +23,6 @@ describe("LinearPrimitive", () => {
     const next = applyLinearDelta(prim, 20, 1016); // 16ms later
     expect(next.value).toBe(20);
     expect(next.velocity).toBeCloseTo(20 / 16);
-  });
-
-  it("decays velocity over time", () => {
-    const prim = { value: 0, velocity: 10, lastUpdatedAt: 0 }; // 10 px/ms
-    const next = advanceLinearInertia(prim, 16);
-    expect(next.velocity).toBeLessThan(10);
-    expect(next.value).toBeGreaterThan(0);
-  });
-
-  it("velocity decays to near zero over many frames", () => {
-    let prim = { value: 0, velocity: 10, lastUpdatedAt: 0 };
-    for (let i = 1; i <= 500; i++) {
-      prim = advanceLinearInertia(prim, i * 16);
-    }
-    expect(Math.abs(prim.velocity)).toBeLessThan(0.001);
   });
 });
 

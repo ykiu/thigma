@@ -78,7 +78,11 @@ describe("createModel", () => {
     it("stays tracking on motion", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "tracking", transform: makeTransform() },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          transform: makeTransform(),
+        },
         {
           type: "motion",
           timestamp: 0,
@@ -95,7 +99,11 @@ describe("createModel", () => {
     it("applies translation delta to transform", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "tracking", transform: makeTransform(10, 20) },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          transform: makeTransform(10, 20),
+        },
         {
           type: "motion",
           timestamp: 0,
@@ -116,7 +124,11 @@ describe("createModel", () => {
       // newTx = 100 + (0 - 100) * 2 + 0 = -100
       // newTy = 100 + (0 - 100) * 2 + 0 = -100
       const state = reduce(
-        { type: "tracking", transform: makeTransform() },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          transform: makeTransform(),
+        },
         {
           type: "motion",
           timestamp: 0,
@@ -135,7 +147,11 @@ describe("createModel", () => {
     it("transitions to settled on release with no velocity and no snap", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "tracking", transform: makeTransform() },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          transform: makeTransform(),
+        },
         { type: "release" },
       );
       expect(state.type).toBe("settled");
@@ -146,6 +162,7 @@ describe("createModel", () => {
       const state = reduce(
         {
           type: "tracking",
+          origin: { x: 0, y: 0 },
           transform: makeTransformWithVelocity(5, 0),
         },
         { type: "release" },
@@ -162,7 +179,11 @@ describe("createModel", () => {
         }),
       });
       const state = reduce(
-        { type: "tracking", transform: makeTransform(60) },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          transform: makeTransform(60),
+        },
         { type: "release" },
       );
       expect(state.type).toBe("snapping");
@@ -174,7 +195,11 @@ describe("createModel", () => {
     it("stays tracking on tick", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "tracking", transform: makeTransform() },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          transform: makeTransform(),
+        },
         { type: "tick", timestamp: 16 },
       );
       expect(state.type).toBe("tracking");
@@ -185,7 +210,11 @@ describe("createModel", () => {
     it("transitions to tracking on motion", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "inertia", transform: makeTransformWithVelocity(1, 0) },
+        {
+          type: "inertia",
+          origin: { x: 0, y: 0 },
+          transform: makeTransformWithVelocity(1, 0),
+        },
         {
           type: "motion",
           timestamp: 0,
@@ -203,6 +232,7 @@ describe("createModel", () => {
       const reduce = makeReduce();
       const before = {
         type: "inertia" as const,
+        origin: { x: 0, y: 0 },
         transform: makeTransformWithVelocity(10, 0),
       };
       const after = reduce(before, { type: "tick", timestamp: 16 });
@@ -213,7 +243,11 @@ describe("createModel", () => {
     it("transitions to settled on tick when velocity is negligible (no snap)", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "inertia", transform: makeTransformWithVelocity(0, 0) },
+        {
+          type: "inertia",
+          origin: { x: 0, y: 0 },
+          transform: makeTransformWithVelocity(0, 0),
+        },
         { type: "tick", timestamp: 16 },
       );
       expect(state.type).toBe("settled");
@@ -222,7 +256,11 @@ describe("createModel", () => {
     it("transitions to settled on release without snap", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "inertia", transform: makeTransformWithVelocity() },
+        {
+          type: "inertia",
+          origin: { x: 0, y: 0 },
+          transform: makeTransformWithVelocity(),
+        },
         { type: "release" },
       );
       expect(state.type).toBe("settled");
@@ -237,7 +275,11 @@ describe("createModel", () => {
         }),
       });
       const state = reduce(
-        { type: "inertia", transform: makeTransformWithVelocity(0, 0, 60) },
+        {
+          type: "inertia",
+          origin: { x: 0, y: 0 },
+          transform: makeTransformWithVelocity(0, 0, 60),
+        },
         { type: "release" },
       );
       expect(state.type).toBe("snapping");
@@ -253,7 +295,11 @@ describe("createModel", () => {
       });
       // at x=60, no velocity — snap target is 100, gap is 40 > SNAP_THRESHOLD
       const state = reduce(
-        { type: "inertia", transform: makeTransformWithVelocity(0, 0, 60) },
+        {
+          type: "inertia",
+          origin: { x: 0, y: 0 },
+          transform: makeTransformWithVelocity(0, 0, 60),
+        },
         { type: "tick", timestamp: 16 },
       );
       expect(state.type).toBe("snapping");
@@ -269,7 +315,11 @@ describe("createModel", () => {
       });
       // at x=100.1, snap target is 100, gap is 0.1 < SNAP_THRESHOLD (0.5)
       const state = reduce(
-        { type: "inertia", transform: makeTransformWithVelocity(0, 0, 100.1) },
+        {
+          type: "inertia",
+          origin: { x: 0, y: 0 },
+          transform: makeTransformWithVelocity(0, 0, 100.1),
+        },
         { type: "tick", timestamp: 16 },
       );
       expect(state.type).toBe("settled");

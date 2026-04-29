@@ -4,9 +4,8 @@ import {
   type ExponentialPrimitive,
   createLinearPrimitive,
   createExponentialPrimitive,
-  applyLinearDelta,
+  computeDtMs,
   applyExponentialFactor,
-  advanceLinearInertia,
   advanceExponentialInertia,
   advanceLinearSpring,
   advanceExponentialSpring,
@@ -30,9 +29,11 @@ export type TransformConfig = {
   snapTarget?: (transform: Transform) => TransformSnapTarget | null;
 };
 
+type Origin = { x: number; y: number };
+
 export type TransformPrivateState =
-  | { type: "tracking"; transform: Transform }
-  | { type: "inertia"; transform: Transform }
+  | { type: "tracking"; transform: Transform; origin: Origin }
+  | { type: "inertia"; transform: Transform; origin: Origin }
   | { type: "snapping"; transform: Transform; target: TransformSnapTarget }
   | { type: "settled"; transform: Transform };
 
@@ -49,11 +50,32 @@ function hasSignificantVelocity(transform: Transform): boolean {
   );
 }
 
-function advanceInertia(transform: Transform, timestamp: number): Transform {
+function advanceInertia(
+  transform: Transform,
+  origin: Origin,
+  timestamp: number,
+): Transform {
+  const oldScale = transform.scale.value;
+  const newScale = advanceExponentialInertia(transform.scale, timestamp);
+  const ds = newScale.value / oldScale;
+
+  const dtMs = computeDtMs(transform.x.lastUpdatedAt, timestamp);
+  const retainedFactor = 0.99 ** dtMs;
+  const newVx = transform.x.velocity * retainedFactor;
+  const newVy = transform.y.velocity * retainedFactor;
+
   return {
-    x: advanceLinearInertia(transform.x, timestamp),
-    y: advanceLinearInertia(transform.y, timestamp),
-    scale: advanceExponentialInertia(transform.scale, timestamp),
+    x: {
+      value: origin.x + (transform.x.value - origin.x) * ds + newVx * dtMs,
+      velocity: newVx,
+      lastUpdatedAt: timestamp,
+    },
+    y: {
+      value: origin.y + (transform.y.value - origin.y) * ds + newVy * dtMs,
+      velocity: newVy,
+      lastUpdatedAt: timestamp,
+    },
+    scale: newScale,
   };
 }
 
@@ -145,19 +167,29 @@ export function createTransformReduce(config?: TransformConfig) {
               clampedTy = Math.max(b.minY, Math.min(b.maxY, proposedTy));
             }
 
+            // Velocity tracks pan-only contribution so that advanceInertia can
+            // handle the scale-pivot effect separately without double-counting.
+            const dtMs = computeDtMs(
+              state.transform.x.lastUpdatedAt,
+              timestamp,
+            );
+            const scalePivotTx = originX + (tx - originX) * dScale;
+            const scalePivotTy = originY + (ty - originY) * dScale;
+
             return {
               type: "tracking",
+              origin: { x: originX, y: originY },
               transform: {
-                x: applyLinearDelta(
-                  state.transform.x,
-                  clampedTx - tx,
-                  timestamp,
-                ),
-                y: applyLinearDelta(
-                  state.transform.y,
-                  clampedTy - ty,
-                  timestamp,
-                ),
+                x: {
+                  value: clampedTx,
+                  velocity: dtMs > 0 ? (clampedTx - scalePivotTx) / dtMs : 0,
+                  lastUpdatedAt: timestamp,
+                },
+                y: {
+                  value: clampedTy,
+                  velocity: dtMs > 0 ? (clampedTy - scalePivotTy) / dtMs : 0,
+                  lastUpdatedAt: timestamp,
+                },
                 scale: applyExponentialFactor(
                   state.transform.scale,
                   dScale,
@@ -173,7 +205,11 @@ export function createTransformReduce(config?: TransformConfig) {
                 return { type: "snapping", transform: state.transform, target };
             }
             if (hasSignificantVelocity(state.transform)) {
-              return { type: "inertia", transform: state.transform };
+              return {
+                type: "inertia",
+                transform: state.transform,
+                origin: state.origin,
+              };
             }
             return {
               type: "settled",
@@ -190,6 +226,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
+              origin: state.origin,
               transform: state.transform,
             };
           case "release": {
@@ -207,7 +244,11 @@ export function createTransformReduce(config?: TransformConfig) {
             if (hasSignificantVelocity(state.transform)) {
               return {
                 ...state,
-                transform: advanceInertia(state.transform, action.timestamp),
+                transform: advanceInertia(
+                  state.transform,
+                  state.origin,
+                  action.timestamp,
+                ),
               };
             }
             if (snapTarget) {
@@ -235,6 +276,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
+              origin: { x: 0, y: 0 },
               transform: state.transform,
             };
           case "release":
@@ -264,6 +306,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
+              origin: { x: 0, y: 0 },
               transform: state.transform,
             };
           case "release":
