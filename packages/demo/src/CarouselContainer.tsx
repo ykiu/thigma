@@ -38,7 +38,15 @@ export function CarouselContainer({
       touchInterpreter()(container),
       mouseDragInterpreter()(container),
     ];
-    const store = createStore(createModel({ x: snapX }))(interpreters);
+    const store = createStore(
+      createModel({
+        snapTarget: ({ x, y, scale }) => ({
+          x: snapX(x.value),
+          y: y.value,
+          scale: scale.value,
+        }),
+      }),
+    )(interpreters);
     const renderer = createRenderer()(content, store);
 
     return () => {
