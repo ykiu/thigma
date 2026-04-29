@@ -527,24 +527,6 @@ describe("createCarouselModel", () => {
       expect(next.type).toBe("scrolling");
       expect(next.items.a.type).toBe("inertia"); // item continues
     });
-
-    it("item transitions to snapping when inertia decays below scale=1", () => {
-      const reduce = makeReduce();
-      const state: CarouselPrivateState = {
-        type: "settled",
-        carousel: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-        items: {
-          a: makeInertiaItem(0, 0, 0.5), // no velocity, under-zoom
-          b: makeSettledItem(),
-          c: makeSettledItem(),
-        },
-      };
-      const next = reduce(state, { type: "tick", timestamp: 16 });
-      expect(next.items.a.type).toBe("snapping");
-      if (next.items.a.type === "snapping") {
-        expect(next.items.a.target).toEqual({ x: 0, y: 0, scale: 1 });
-      }
-    });
   });
 
   // -------------------------------------------------------------------------

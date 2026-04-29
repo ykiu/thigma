@@ -253,22 +253,6 @@ export function createTransformReduce(config?: TransformConfig) {
                 scale: newScale,
               };
             }
-            if (snapTarget) {
-              const target = snapTarget(state);
-              if (target) {
-                const snappingState: SnappingState = {
-                  type: "snapping",
-                  x: state.x,
-                  y: state.y,
-                  scale: state.scale,
-                  target,
-                };
-                if (isSnapSettled(snappingState)) {
-                  return settleAtTarget(target, action.timestamp);
-                }
-                return snappingState;
-              }
-            }
             return settleTransform(state);
           }
         }

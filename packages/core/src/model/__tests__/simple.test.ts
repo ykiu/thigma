@@ -240,7 +240,7 @@ describe("createModel", () => {
       expect(after.x.value).toBeGreaterThan(0);
     });
 
-    it("transitions to settled on tick when velocity is negligible (no snap)", () => {
+    it("transitions to settled on tick when velocity is negligible", () => {
       const reduce = makeReduce();
       const state = reduce(
         {
@@ -253,7 +253,7 @@ describe("createModel", () => {
       expect(state.type).toBe("settled");
     });
 
-    it("transitions to settled on release without snap", () => {
+    it("transitions to settled on release", () => {
       const reduce = makeReduce();
       const state = reduce(
         {
@@ -283,47 +283,6 @@ describe("createModel", () => {
         { type: "release" },
       );
       expect(state.type).toBe("snapping");
-    });
-
-    it("transitions to snapping on tick when velocity decays and snap target is far", () => {
-      const reduce = makeReduce({
-        snapTarget: (t) => ({
-          x: Math.round(t.x.value / 100) * 100,
-          y: t.y.value,
-          scale: t.scale.value,
-        }),
-      });
-      // at x=60, no velocity — snap target is 100, gap is 40 > SNAP_THRESHOLD
-      const state = reduce(
-        {
-          type: "inertia",
-          origin: { x: 0, y: 0 },
-          ...makeTransformWithVelocity(0, 0, 60),
-        },
-        { type: "tick", timestamp: 16 },
-      );
-      expect(state.type).toBe("snapping");
-    });
-
-    it("transitions to settled on tick when snap target is already within threshold", () => {
-      const reduce = makeReduce({
-        snapTarget: (t) => ({
-          x: Math.round(t.x.value / 100) * 100,
-          y: t.y.value,
-          scale: t.scale.value,
-        }),
-      });
-      // at x=100.1, snap target is 100, gap is 0.1 < SNAP_THRESHOLD (0.5)
-      const state = reduce(
-        {
-          type: "inertia",
-          origin: { x: 0, y: 0 },
-          ...makeTransformWithVelocity(0, 0, 100.1),
-        },
-        { type: "tick", timestamp: 16 },
-      );
-      expect(state.type).toBe("settled");
-      expect(state.x.value).toBeCloseTo(100, 1);
     });
   });
 
