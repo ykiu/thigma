@@ -13,7 +13,7 @@ export function createLinearPrimitive(value = 0): LinearPrimitive {
   return { value, velocity: 0, lastUpdatedAt: NaN };
 }
 
-function computeDtMs(lastUpdatedAt: number, timestamp: number): number {
+export function computeDtMs(lastUpdatedAt: number, timestamp: number): number {
   if (Number.isNaN(lastUpdatedAt)) return 16; // default for first update
   return Math.min(timestamp - lastUpdatedAt, 100); // cap to avoid huge jumps after suspension
 }
@@ -30,22 +30,6 @@ export function applyLinearDelta(
   const newValue = prim.value + delta;
   const velocity = dtMs > 0 ? delta / dtMs : 0;
   return { value: newValue, velocity, lastUpdatedAt: timestamp };
-}
-
-/**
- * Advance a LinearPrimitive by inertia (exponential decay of velocity).
- * decayFactor: fraction of velocity retained per ms (e.g. 0.99 = fast, 0.90 = slow)
- */
-export function advanceLinearInertia(
-  prim: LinearPrimitive,
-  timestamp: number,
-  decayFactor = 0.99,
-): LinearPrimitive {
-  const dtMs = computeDtMs(prim.lastUpdatedAt, timestamp);
-  const retainedFactor = decayFactor ** dtMs;
-  const velocity = prim.velocity * retainedFactor;
-  const value = prim.value + velocity * dtMs;
-  return { value, velocity, lastUpdatedAt: timestamp };
 }
 
 /**
