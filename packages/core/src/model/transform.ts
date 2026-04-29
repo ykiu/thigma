@@ -11,7 +11,7 @@ import {
   advanceExponentialSpring,
 } from "./primitives.js";
 
-export type Transform = {
+type Transform = {
   x: LinearPrimitive;
   y: LinearPrimitive;
   scale: ExponentialPrimitive;
