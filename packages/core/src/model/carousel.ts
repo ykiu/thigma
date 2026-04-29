@@ -39,10 +39,13 @@ export type CarouselPublicState = {
 /**
  * Carousel-level phase.
  *
- *   free   — carousel strip motion is managed by TransformPrivateState.
- *            Transitions to locked when a gesture targets an active or zoomed
- *            item while the strip is settled.
- *   locked — all motion is delegated to the active item. Exits on release.
+ *   free          — no active gesture; animations may still be running.
+ *   indeterminate — entered on the first motion from free; the next motion
+ *                   determines whether to scroll the carousel or pan/zoom an item.
+ *   carousel      — gesture is scrolling the carousel strip.
+ *   items         — gesture is targeting activeItemId for pan/zoom.
+ *
+ * tick advances both carousel and items animations in every phase.
  */
 export type CarouselPrivateState =
   | {
@@ -51,9 +54,20 @@ export type CarouselPrivateState =
       items: Record<string, TransformPrivateState>;
     }
   | {
-      type: "locked";
+      type: "indeterminate";
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
+    }
+  | {
+      type: "carousel";
+      carousel: TransformPrivateState;
+      items: Record<string, TransformPrivateState>;
+    }
+  | {
+      type: "items";
+      carousel: TransformPrivateState;
+      items: Record<string, TransformPrivateState>;
+      activeItemId: string;
     };
 
 type MotionEvent = Extract<InterpreterEvent, { type: "motion" }>;
@@ -84,42 +98,6 @@ function getItemBounds(
     minY: itemHeight * (1 - scale),
     maxY: 0,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Routing helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Determines whether a motion event should lock the carousel to an item
- * or scroll the carousel strip.
- *
- * Locks when the target item is zoomed, in motion, or the gesture is a pinch.
- */
-function resolveMotionTarget(
-  action: MotionEvent,
-  items: Record<string, TransformPrivateState>,
-): { type: "locked"; itemId: string } | { type: "scrolling" } {
-  if (action.itemId !== undefined) {
-    const item = items[action.itemId];
-    if (item) {
-      const isZoomed = item.scale.value !== 1;
-      const isInMotion = item.type !== "settled";
-      if (action.dScale !== 1 || isZoomed || isInMotion) {
-        return { type: "locked", itemId: action.itemId };
-      }
-    }
-  }
-  return { type: "scrolling" };
-}
-
-function findTrackingItemId(
-  items: Record<string, TransformPrivateState>,
-): string | undefined {
-  for (const [id, item] of Object.entries(items)) {
-    if (item.type === "tracking") return id;
-  }
-  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +171,7 @@ function createCarouselReduce(config: CarouselConfig) {
   }
 
   /**
-   * Transitions items into the locked state: starts tracking targetItemId and
+   * Transitions items into the tracking state: starts tracking targetItemId and
    * immediately settles any other items that are in motion (one active item at a time).
    */
   function lockItems(
@@ -244,17 +222,74 @@ function createCarouselReduce(config: CarouselConfig) {
     switch (state.type) {
       case "free": {
         switch (action.type) {
+          case "motion":
+            return { ...state, type: "indeterminate" };
+          case "release":
+            return state;
+          case "tick": {
+            const carousel = carouselReduce(state.carousel, action);
+            const items = advanceAllItems(state.items, action.timestamp);
+            if (carousel === state.carousel && items === state.items)
+              return state;
+            return { ...state, carousel, items };
+          }
+        }
+        throw new Error("unreachable");
+      }
+
+      case "indeterminate": {
+        switch (action.type) {
           case "motion": {
+            // Determine whether a motion event should lock the carousel to an item
+            // or scroll the carousel strip.
             if (state.carousel.type === "settled") {
-              const target = resolveMotionTarget(action, state.items);
-              if (target.type === "locked") {
-                return {
-                  type: "locked",
-                  carousel: state.carousel,
-                  items: lockItems(state.items, target.itemId, action),
-                };
+              if (action.itemId !== undefined) {
+                const item = state.items[action.itemId];
+                if (item) {
+                  const isZoomed = item.scale.value !== 1;
+                  const isInMotion = item.type !== "settled";
+                  if (action.dScale !== 1 || isZoomed || isInMotion) {
+                    // Lock to item
+                    return {
+                      type: "items",
+                      carousel: state.carousel,
+                      items: lockItems(state.items, action.itemId, action),
+                      activeItemId: action.itemId,
+                    };
+                  }
+                }
               }
             }
+            const normalizedAction = {
+              ...action,
+              dy: 0,
+              dScale: 1,
+              originX: 0,
+              originY: 0,
+            };
+            const carousel = carouselReduce(state.carousel, normalizedAction);
+            return { type: "carousel", carousel, items: state.items };
+          }
+          case "release":
+            return {
+              type: "free",
+              carousel: state.carousel,
+              items: state.items,
+            };
+          case "tick": {
+            const carousel = carouselReduce(state.carousel, action);
+            const items = advanceAllItems(state.items, action.timestamp);
+            if (carousel === state.carousel && items === state.items)
+              return state;
+            return { ...state, carousel, items };
+          }
+        }
+        throw new Error("unreachable");
+      }
+
+      case "carousel": {
+        switch (action.type) {
+          case "motion": {
             // Item-targeted gestures cannot interrupt a snap.
             if (
               state.carousel.type === "snapping" &&
@@ -270,12 +305,12 @@ function createCarouselReduce(config: CarouselConfig) {
               originY: 0,
             };
             const carousel = carouselReduce(state.carousel, normalizedAction);
+            if (carousel === state.carousel) return state;
             return { ...state, carousel };
           }
           case "release": {
             const carousel = carouselReduce(state.carousel, action);
-            if (carousel === state.carousel) return state;
-            return { ...state, carousel };
+            return { type: "free", carousel, items: state.items };
           }
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
@@ -288,34 +323,37 @@ function createCarouselReduce(config: CarouselConfig) {
         throw new Error("unreachable");
       }
 
-      case "locked": {
+      case "items": {
         switch (action.type) {
           case "motion": {
-            const trackingId = findTrackingItemId(state.items);
-            if (trackingId === undefined || action.itemId !== trackingId)
-              return state;
+            if (action.itemId !== state.activeItemId) return state;
             return {
               ...state,
               items: {
                 ...state.items,
-                [trackingId]: itemReduce(state.items[trackingId], action),
+                [state.activeItemId]: itemReduce(
+                  state.items[state.activeItemId],
+                  action,
+                ),
               },
             };
           }
           case "release": {
-            const trackingId = findTrackingItemId(state.items);
-            const items =
-              trackingId !== undefined
-                ? {
-                    ...state.items,
-                    [trackingId]: itemReduce(state.items[trackingId], action),
-                  }
-                : state.items;
+            const items = {
+              ...state.items,
+              [state.activeItemId]: itemReduce(
+                state.items[state.activeItemId],
+                action,
+              ),
+            };
             return { type: "free", carousel: state.carousel, items };
           }
           case "tick": {
+            const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);
-            return items === state.items ? state : { ...state, items };
+            if (carousel === state.carousel && items === state.items)
+              return state;
+            return { ...state, carousel, items };
           }
         }
         throw new Error("unreachable");
