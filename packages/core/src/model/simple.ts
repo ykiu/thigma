@@ -7,11 +7,11 @@ import {
 
 export type { TransformPrivateState, TransformConfig };
 
-function toPublicState({ transform }: TransformPrivateState): State {
+function toPublicState(state: TransformPrivateState): State {
   return {
-    transformX: transform.x.value,
-    transformY: transform.y.value,
-    scale: transform.scale.value,
+    transformX: state.x.value,
+    transformY: state.y.value,
+    scale: state.scale.value,
   };
 }
 

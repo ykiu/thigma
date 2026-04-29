@@ -31,9 +31,9 @@ describe("createModel", () => {
       const reduce = makeReduce();
       const state = reduce(undefined, { type: "tick", timestamp: 0 });
       expect(state.type).toBe("settled");
-      expect(state.transform.x.value).toBe(0);
-      expect(state.transform.y.value).toBe(0);
-      expect(state.transform.scale.value).toBe(1);
+      expect(state.x.value).toBe(0);
+      expect(state.y.value).toBe(0);
+      expect(state.scale.value).toBe(1);
     });
   });
 
@@ -41,7 +41,7 @@ describe("createModel", () => {
     it("transitions to tracking on motion", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "settled", transform: makeTransform() },
+        { type: "settled", ...makeTransform() },
         {
           type: "motion",
           timestamp: 0,
@@ -58,7 +58,7 @@ describe("createModel", () => {
     it("stays settled on tick", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "settled", transform: makeTransform() },
+        { type: "settled", ...makeTransform() },
         { type: "tick", timestamp: 16 },
       );
       expect(state.type).toBe("settled");
@@ -67,7 +67,7 @@ describe("createModel", () => {
     it("stays settled on release", () => {
       const reduce = makeReduce();
       const state = reduce(
-        { type: "settled", transform: makeTransform() },
+        { type: "settled", ...makeTransform() },
         { type: "release" },
       );
       expect(state.type).toBe("settled");
@@ -81,7 +81,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransform(),
+          ...makeTransform(),
         },
         {
           type: "motion",
@@ -102,7 +102,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransform(10, 20),
+          ...makeTransform(10, 20),
         },
         {
           type: "motion",
@@ -114,8 +114,8 @@ describe("createModel", () => {
           originY: 0,
         },
       );
-      expect(state.transform.x.value).toBeCloseTo(15);
-      expect(state.transform.y.value).toBeCloseTo(17);
+      expect(state.x.value).toBeCloseTo(15);
+      expect(state.y.value).toBeCloseTo(17);
     });
 
     it("adjusts translation for scale origin", () => {
@@ -127,7 +127,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransform(),
+          ...makeTransform(),
         },
         {
           type: "motion",
@@ -139,9 +139,9 @@ describe("createModel", () => {
           originY: 100,
         },
       );
-      expect(state.transform.x.value).toBeCloseTo(-100);
-      expect(state.transform.y.value).toBeCloseTo(-100);
-      expect(state.transform.scale.value).toBeCloseTo(2);
+      expect(state.x.value).toBeCloseTo(-100);
+      expect(state.y.value).toBeCloseTo(-100);
+      expect(state.scale.value).toBeCloseTo(2);
     });
 
     it("transitions to settled on release with no velocity and no snap", () => {
@@ -150,7 +150,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransform(),
+          ...makeTransform(),
         },
         { type: "release" },
       );
@@ -163,7 +163,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(5, 0),
+          ...makeTransformWithVelocity(5, 0),
         },
         { type: "release" },
       );
@@ -182,7 +182,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransform(60),
+          ...makeTransform(60),
         },
         { type: "release" },
       );
@@ -198,7 +198,7 @@ describe("createModel", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          transform: makeTransform(),
+          ...makeTransform(),
         },
         { type: "tick", timestamp: 16 },
       );
@@ -213,7 +213,7 @@ describe("createModel", () => {
         {
           type: "inertia",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(1, 0),
+          ...makeTransformWithVelocity(1, 0),
         },
         {
           type: "motion",
@@ -233,11 +233,11 @@ describe("createModel", () => {
       const before = {
         type: "inertia" as const,
         origin: { x: 0, y: 0 },
-        transform: makeTransformWithVelocity(10, 0),
+        ...makeTransformWithVelocity(10, 0),
       };
       const after = reduce(before, { type: "tick", timestamp: 16 });
       expect(after.type).toBe("inertia");
-      expect(after.transform.x.value).toBeGreaterThan(0);
+      expect(after.x.value).toBeGreaterThan(0);
     });
 
     it("transitions to settled on tick when velocity is negligible (no snap)", () => {
@@ -246,7 +246,7 @@ describe("createModel", () => {
         {
           type: "inertia",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(0, 0),
+          ...makeTransformWithVelocity(0, 0),
         },
         { type: "tick", timestamp: 16 },
       );
@@ -259,7 +259,7 @@ describe("createModel", () => {
         {
           type: "inertia",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(),
+          ...makeTransformWithVelocity(),
         },
         { type: "release" },
       );
@@ -278,7 +278,7 @@ describe("createModel", () => {
         {
           type: "inertia",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(0, 0, 60),
+          ...makeTransformWithVelocity(0, 0, 60),
         },
         { type: "release" },
       );
@@ -298,7 +298,7 @@ describe("createModel", () => {
         {
           type: "inertia",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(0, 0, 60),
+          ...makeTransformWithVelocity(0, 0, 60),
         },
         { type: "tick", timestamp: 16 },
       );
@@ -318,12 +318,12 @@ describe("createModel", () => {
         {
           type: "inertia",
           origin: { x: 0, y: 0 },
-          transform: makeTransformWithVelocity(0, 0, 100.1),
+          ...makeTransformWithVelocity(0, 0, 100.1),
         },
         { type: "tick", timestamp: 16 },
       );
       expect(state.type).toBe("settled");
-      expect(state.transform.x.value).toBeCloseTo(100, 1);
+      expect(state.x.value).toBeCloseTo(100, 1);
     });
   });
 
@@ -334,7 +334,7 @@ describe("createModel", () => {
     ): TransformPrivateState {
       return {
         type: "snapping",
-        transform: makeTransform(x),
+        ...makeTransform(x),
         target: { x: targetX, y: 0, scale: 1 },
       };
     }
@@ -366,8 +366,8 @@ describe("createModel", () => {
         timestamp: 16,
       });
       expect(after.type).toBe("snapping");
-      expect(after.transform.x.value).toBeGreaterThan(60);
-      expect(after.transform.x.value).toBeLessThan(100);
+      expect(after.x.value).toBeGreaterThan(60);
+      expect(after.x.value).toBeLessThan(100);
     });
 
     it("transitions to settled when within snap threshold", () => {
@@ -377,7 +377,7 @@ describe("createModel", () => {
         timestamp: 16,
       });
       expect(after.type).toBe("settled");
-      expect(after.transform.x.value).toBeCloseTo(100);
+      expect(after.x.value).toBeCloseTo(100);
     });
 
     it("converges to snap target over many frames", () => {
@@ -388,7 +388,7 @@ describe("createModel", () => {
         if (state.type === "settled") break;
       }
       expect(state.type).toBe("settled");
-      expect(state.transform.x.value).toBeCloseTo(100, 0);
+      expect(state.x.value).toBeCloseTo(100, 0);
     });
   });
 });

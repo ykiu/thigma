@@ -11,12 +11,6 @@ import {
   advanceExponentialSpring,
 } from "./primitives.js";
 
-type Transform = {
-  x: LinearPrimitive;
-  y: LinearPrimitive;
-  scale: ExponentialPrimitive;
-};
-
 export type TransformSnapTarget = { x: number; y: number; scale: number };
 
 export type TransformConfig = {
@@ -26,52 +20,85 @@ export type TransformConfig = {
     minY: number;
     maxY: number;
   };
-  snapTarget?: (transform: Transform) => TransformSnapTarget | null;
+  snapTarget?: (state: {
+    x: LinearPrimitive;
+    y: LinearPrimitive;
+    scale: ExponentialPrimitive;
+  }) => TransformSnapTarget | null;
 };
 
 type Origin = { x: number; y: number };
 
 export type TransformPrivateState =
-  | { type: "tracking"; transform: Transform; origin: Origin }
-  | { type: "inertia"; transform: Transform; origin: Origin }
-  | { type: "snapping"; transform: Transform; target: TransformSnapTarget }
-  | { type: "settled"; transform: Transform };
+  | {
+      type: "tracking";
+      x: LinearPrimitive;
+      y: LinearPrimitive;
+      scale: ExponentialPrimitive;
+      origin: Origin;
+    }
+  | {
+      type: "inertia";
+      x: LinearPrimitive;
+      y: LinearPrimitive;
+      scale: ExponentialPrimitive;
+      origin: Origin;
+    }
+  | {
+      type: "snapping";
+      x: LinearPrimitive;
+      y: LinearPrimitive;
+      scale: ExponentialPrimitive;
+      target: TransformSnapTarget;
+    }
+  | {
+      type: "settled";
+      x: LinearPrimitive;
+      y: LinearPrimitive;
+      scale: ExponentialPrimitive;
+    };
+
+type InertiaState = Extract<TransformPrivateState, { type: "inertia" }>;
+type SnappingState = Extract<TransformPrivateState, { type: "snapping" }>;
 
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
 const LOG_VELOCITY_THRESHOLD = 0.0001; // log-units/ms
 
-function hasSignificantVelocity(transform: Transform): boolean {
+function hasSignificantVelocity(state: {
+  x: LinearPrimitive;
+  y: LinearPrimitive;
+  scale: ExponentialPrimitive;
+}): boolean {
   return (
-    Math.abs(transform.x.velocity) > VELOCITY_THRESHOLD ||
-    Math.abs(transform.y.velocity) > VELOCITY_THRESHOLD ||
-    Math.abs(transform.scale.logVelocity) > LOG_VELOCITY_THRESHOLD
+    Math.abs(state.x.velocity) > VELOCITY_THRESHOLD ||
+    Math.abs(state.y.velocity) > VELOCITY_THRESHOLD ||
+    Math.abs(state.scale.logVelocity) > LOG_VELOCITY_THRESHOLD
   );
 }
 
-function advanceInertia(
-  transform: Transform,
-  origin: Origin,
-  timestamp: number,
-): Transform {
-  const oldScale = transform.scale.value;
-  const newScale = advanceExponentialInertia(transform.scale, timestamp);
+function advanceInertia(state: InertiaState, timestamp: number): InertiaState {
+  const oldScale = state.scale.value;
+  const newScale = advanceExponentialInertia(state.scale, timestamp);
   const ds = newScale.value / oldScale;
 
-  const dtMs = computeDtMs(transform.x.lastUpdatedAt, timestamp);
+  const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
   const retainedFactor = 0.99 ** dtMs;
-  const newVx = transform.x.velocity * retainedFactor;
-  const newVy = transform.y.velocity * retainedFactor;
+  const newVx = state.x.velocity * retainedFactor;
+  const newVy = state.y.velocity * retainedFactor;
 
   return {
+    ...state,
     x: {
-      value: origin.x + (transform.x.value - origin.x) * ds + newVx * dtMs,
+      value:
+        state.origin.x + (state.x.value - state.origin.x) * ds + newVx * dtMs,
       velocity: newVx,
       lastUpdatedAt: timestamp,
     },
     y: {
-      value: origin.y + (transform.y.value - origin.y) * ds + newVy * dtMs,
+      value:
+        state.origin.y + (state.y.value - state.origin.y) * ds + newVy * dtMs,
       velocity: newVy,
       lastUpdatedAt: timestamp,
     },
@@ -79,54 +106,42 @@ function advanceInertia(
   };
 }
 
-function advanceSpring(
-  transform: Transform,
-  target: TransformSnapTarget,
-  timestamp: number,
-): Transform {
+function advanceSpring(state: SnappingState, timestamp: number): SnappingState {
   return {
-    x: advanceLinearSpring(transform.x, target.x, timestamp),
-    y: advanceLinearSpring(transform.y, target.y, timestamp),
-    scale: advanceExponentialSpring(transform.scale, target.scale, timestamp),
+    ...state,
+    x: advanceLinearSpring(state.x, state.target.x, timestamp),
+    y: advanceLinearSpring(state.y, state.target.y, timestamp),
+    scale: advanceExponentialSpring(state.scale, state.target.scale, timestamp),
   };
 }
 
-function isSnapSettled(
-  transform: Transform,
-  target: TransformSnapTarget,
-): boolean {
+function isSnapSettled(state: SnappingState): boolean {
   return (
-    Math.abs(transform.x.value - target.x) < SNAP_THRESHOLD &&
-    Math.abs(transform.y.value - target.y) < SNAP_THRESHOLD &&
-    Math.abs(transform.scale.value - target.scale) < SCALE_SNAP_THRESHOLD
+    Math.abs(state.x.value - state.target.x) < SNAP_THRESHOLD &&
+    Math.abs(state.y.value - state.target.y) < SNAP_THRESHOLD &&
+    Math.abs(state.scale.value - state.target.scale) < SCALE_SNAP_THRESHOLD
   );
 }
 
-export function settleTransform(transform: Transform): Transform {
+export function settleTransform(state: {
+  x: LinearPrimitive;
+  y: LinearPrimitive;
+  scale: ExponentialPrimitive;
+}): Extract<TransformPrivateState, { type: "settled" }> {
   return {
-    x: {
-      value: transform.x.value,
-      velocity: 0,
-      lastUpdatedAt: transform.x.lastUpdatedAt,
-    },
-    y: {
-      value: transform.y.value,
-      velocity: 0,
-      lastUpdatedAt: transform.y.lastUpdatedAt,
-    },
-    scale: {
-      value: transform.scale.value,
-      logVelocity: 0,
-      lastUpdatedAt: transform.scale.lastUpdatedAt,
-    },
+    type: "settled",
+    x: { ...state.x, velocity: 0 },
+    y: { ...state.y, velocity: 0 },
+    scale: { ...state.scale, logVelocity: 0 },
   };
 }
 
 function settleAtTarget(
   target: TransformSnapTarget,
   timestamp: number,
-): Transform {
+): Extract<TransformPrivateState, { type: "settled" }> {
   return {
+    type: "settled",
     x: { value: target.x, velocity: 0, lastUpdatedAt: timestamp },
     y: { value: target.y, velocity: 0, lastUpdatedAt: timestamp },
     scale: { value: target.scale, logVelocity: 0, lastUpdatedAt: timestamp },
@@ -139,11 +154,9 @@ export function createTransformReduce(config?: TransformConfig) {
   return function reduce(
     state: TransformPrivateState | undefined = {
       type: "settled",
-      transform: {
-        x: createLinearPrimitive(0),
-        y: createLinearPrimitive(0),
-        scale: createExponentialPrimitive(1),
-      },
+      x: createLinearPrimitive(0),
+      y: createLinearPrimitive(0),
+      scale: createExponentialPrimitive(1),
     },
     action: StoreAction,
   ): TransformPrivateState {
@@ -152,9 +165,9 @@ export function createTransformReduce(config?: TransformConfig) {
         switch (action.type) {
           case "motion": {
             const { dx, dy, dScale, originX, originY, timestamp } = action;
-            const tx = state.transform.x.value;
-            const ty = state.transform.y.value;
-            const newScale = state.transform.scale.value * dScale;
+            const tx = state.x.value;
+            const ty = state.y.value;
+            const newScale = state.scale.value * dScale;
 
             const proposedTx = originX + (tx - originX) * dScale + dx;
             const proposedTy = originY + (ty - originY) * dScale + dy;
@@ -169,52 +182,48 @@ export function createTransformReduce(config?: TransformConfig) {
 
             // Velocity tracks pan-only contribution so that advanceInertia can
             // handle the scale-pivot effect separately without double-counting.
-            const dtMs = computeDtMs(
-              state.transform.x.lastUpdatedAt,
-              timestamp,
-            );
+            const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
             const scalePivotTx = originX + (tx - originX) * dScale;
             const scalePivotTy = originY + (ty - originY) * dScale;
 
             return {
               type: "tracking",
               origin: { x: originX, y: originY },
-              transform: {
-                x: {
-                  value: clampedTx,
-                  velocity: dtMs > 0 ? (clampedTx - scalePivotTx) / dtMs : 0,
-                  lastUpdatedAt: timestamp,
-                },
-                y: {
-                  value: clampedTy,
-                  velocity: dtMs > 0 ? (clampedTy - scalePivotTy) / dtMs : 0,
-                  lastUpdatedAt: timestamp,
-                },
-                scale: applyExponentialFactor(
-                  state.transform.scale,
-                  dScale,
-                  timestamp,
-                ),
+              x: {
+                value: clampedTx,
+                velocity: dtMs > 0 ? (clampedTx - scalePivotTx) / dtMs : 0,
+                lastUpdatedAt: timestamp,
               },
+              y: {
+                value: clampedTy,
+                velocity: dtMs > 0 ? (clampedTy - scalePivotTy) / dtMs : 0,
+                lastUpdatedAt: timestamp,
+              },
+              scale: applyExponentialFactor(state.scale, dScale, timestamp),
             };
           }
           case "release": {
             if (snapTarget) {
-              const target = snapTarget(state.transform);
+              const target = snapTarget(state);
               if (target)
-                return { type: "snapping", transform: state.transform, target };
+                return {
+                  type: "snapping",
+                  x: state.x,
+                  y: state.y,
+                  scale: state.scale,
+                  target,
+                };
             }
-            if (hasSignificantVelocity(state.transform)) {
+            if (hasSignificantVelocity(state)) {
               return {
                 type: "inertia",
-                transform: state.transform,
+                x: state.x,
+                y: state.y,
+                scale: state.scale,
                 origin: state.origin,
               };
             }
-            return {
-              type: "settled",
-              transform: settleTransform(state.transform),
-            };
+            return settleTransform(state);
           }
           case "tick":
             return state;
@@ -227,46 +236,45 @@ export function createTransformReduce(config?: TransformConfig) {
             return {
               type: "tracking",
               origin: state.origin,
-              transform: state.transform,
+              x: state.x,
+              y: state.y,
+              scale: state.scale,
             };
           case "release": {
             if (snapTarget) {
-              const target = snapTarget(state.transform);
+              const target = snapTarget(state);
               if (target)
-                return { type: "snapping", transform: state.transform, target };
+                return {
+                  type: "snapping",
+                  x: state.x,
+                  y: state.y,
+                  scale: state.scale,
+                  target,
+                };
             }
-            return {
-              type: "settled",
-              transform: settleTransform(state.transform),
-            };
+            return settleTransform(state);
           }
           case "tick": {
-            if (hasSignificantVelocity(state.transform)) {
-              return {
-                ...state,
-                transform: advanceInertia(
-                  state.transform,
-                  state.origin,
-                  action.timestamp,
-                ),
-              };
+            if (hasSignificantVelocity(state)) {
+              return advanceInertia(state, action.timestamp);
             }
             if (snapTarget) {
-              const target = snapTarget(state.transform);
+              const target = snapTarget(state);
               if (target) {
-                if (isSnapSettled(state.transform, target)) {
-                  return {
-                    type: "settled",
-                    transform: settleAtTarget(target, action.timestamp),
-                  };
+                const snappingState: SnappingState = {
+                  type: "snapping",
+                  x: state.x,
+                  y: state.y,
+                  scale: state.scale,
+                  target,
+                };
+                if (isSnapSettled(snappingState)) {
+                  return settleAtTarget(target, action.timestamp);
                 }
-                return { type: "snapping", transform: state.transform, target };
+                return snappingState;
               }
             }
-            return {
-              type: "settled",
-              transform: settleTransform(state.transform),
-            };
+            return settleTransform(state);
           }
         }
         throw new Error("unreachable");
@@ -277,26 +285,17 @@ export function createTransformReduce(config?: TransformConfig) {
             return {
               type: "tracking",
               origin: { x: 0, y: 0 },
-              transform: state.transform,
+              x: state.x,
+              y: state.y,
+              scale: state.scale,
             };
           case "release":
             return state;
           case "tick": {
-            const { target } = state;
-            if (isSnapSettled(state.transform, target)) {
-              return {
-                type: "settled",
-                transform: settleAtTarget(target, action.timestamp),
-              };
+            if (isSnapSettled(state)) {
+              return settleAtTarget(state.target, action.timestamp);
             }
-            return {
-              ...state,
-              transform: advanceSpring(
-                state.transform,
-                target,
-                action.timestamp,
-              ),
-            };
+            return advanceSpring(state, action.timestamp);
           }
         }
         throw new Error("unreachable");
@@ -307,7 +306,9 @@ export function createTransformReduce(config?: TransformConfig) {
             return {
               type: "tracking",
               origin: { x: 0, y: 0 },
-              transform: state.transform,
+              x: state.x,
+              y: state.y,
+              scale: state.scale,
             };
           case "release":
             return state;

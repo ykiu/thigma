@@ -125,7 +125,7 @@ function resolveMotionTarget(
   if (action.itemId !== undefined) {
     const item = items[action.itemId];
     if (item) {
-      const isZoomed = item.transform.scale.value !== 1;
+      const isZoomed = item.scale.value !== 1;
       const isInMotion = item.type !== "settled";
       if (action.dScale !== 1 || isZoomed || isInMotion) {
         return { type: "locked", itemId: action.itemId };
@@ -174,9 +174,9 @@ function toCarouselPublicState(
   > = {};
   for (const [id, item] of Object.entries(state.items)) {
     items[id] = {
-      transformX: item.transform.x.value,
-      transformY: item.transform.y.value,
-      scale: item.transform.scale.value,
+      transformX: item.x.value,
+      transformY: item.y.value,
+      scale: item.scale.value,
     };
   }
   return { carouselTranslateX: state.carousel.value, items };
@@ -202,11 +202,9 @@ function createCarouselReduce(config: CarouselConfig) {
     for (const id of itemIds) {
       items[id] = {
         type: "settled",
-        transform: {
-          x: createLinearPrimitive(0),
-          y: createLinearPrimitive(0),
-          scale: createExponentialPrimitive(1),
-        },
+        x: createLinearPrimitive(0),
+        y: createLinearPrimitive(0),
+        scale: createExponentialPrimitive(1),
       };
     }
     return items;
@@ -226,10 +224,7 @@ function createCarouselReduce(config: CarouselConfig) {
       if (id === targetItemId) {
         result[id] = itemReduce(item, action);
       } else if (item.type !== "settled") {
-        result[id] = {
-          type: "settled",
-          transform: settleTransform(item.transform),
-        };
+        result[id] = settleTransform(item);
       } else {
         result[id] = item;
       }
