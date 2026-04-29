@@ -1,30 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
-  createLinearPrimitive,
-  applyLinearDelta,
   advanceLinearSpring,
   createExponentialPrimitive,
   applyExponentialFactor,
   advanceExponentialInertia,
 } from "../../model/primitives.js";
-
-describe("LinearPrimitive", () => {
-  it("applies delta and computes velocity", () => {
-    const prim = createLinearPrimitive(0);
-    // lastUpdatedAt is NaN, so dtMs defaults to 16ms regardless of timestamp value
-    const next = applyLinearDelta(prim, 20, 1000);
-    expect(next.value).toBe(20);
-    expect(next.velocity).toBeCloseTo(20 / 16);
-    expect(next.lastUpdatedAt).toBe(1000);
-  });
-
-  it("computes velocity from elapsed time on subsequent updates", () => {
-    const prim = applyLinearDelta(createLinearPrimitive(0), 0, 1000); // initialize at t=1000
-    const next = applyLinearDelta(prim, 20, 1016); // 16ms later
-    expect(next.value).toBe(20);
-    expect(next.velocity).toBeCloseTo(20 / 16);
-  });
-});
 
 describe("advanceLinearSpring", () => {
   it("moves value toward target", () => {

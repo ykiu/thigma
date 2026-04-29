@@ -1,10 +1,7 @@
 import type { InterpreterEvent, StoreAction, Model } from "../types.js";
 import {
-  type LinearPrimitive,
   createLinearPrimitive,
   createExponentialPrimitive,
-  applyLinearDelta,
-  advanceLinearSpring,
 } from "./primitives.js";
 import {
   type TransformPrivateState,
@@ -40,45 +37,26 @@ export type CarouselPublicState = {
 // ---------------------------------------------------------------------------
 
 /**
- * Carousel-level phase. Tracks only the carousel strip's motion.
- * Item-level concerns live in TransformPrivateState, one per item.
+ * Carousel-level phase.
  *
- *   settled  — strip is at rest.
- *   scrolling — user is dragging the strip.
- *   snapping  — strip is spring-snapping to the nearest item boundary.
- *   locked    — all motion is delegated to the active item (carousel entered
- *               from settled; exits on release back to settled).
+ *   free   — carousel strip motion is managed by TransformPrivateState.
+ *            Transitions to locked when a gesture targets an active or zoomed
+ *            item while the strip is settled.
+ *   locked — all motion is delegated to the active item. Exits on release.
  */
 export type CarouselPrivateState =
   | {
-      type: "settled";
-      carousel: LinearPrimitive;
-      items: Record<string, TransformPrivateState>;
-    }
-  | {
-      type: "scrolling";
-      carousel: LinearPrimitive;
-      items: Record<string, TransformPrivateState>;
-    }
-  | {
-      type: "snapping";
-      carousel: LinearPrimitive;
-      carouselTarget: number;
+      type: "free";
+      carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
   | {
       type: "locked";
-      carousel: LinearPrimitive;
+      carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     };
 
 type MotionEvent = Extract<InterpreterEvent, { type: "motion" }>;
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const CAROUSEL_SNAP_THRESHOLD = 0.5; // px
 
 // ---------------------------------------------------------------------------
 // Item bounds helper
@@ -157,10 +135,6 @@ function computeCarouselSnapTarget(
   return Math.max(-(itemCount - 1) * itemWidth, Math.min(0, nearest));
 }
 
-function isCarouselSettled(carousel: LinearPrimitive, target: number): boolean {
-  return Math.abs(carousel.value - target) < CAROUSEL_SNAP_THRESHOLD;
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -179,7 +153,7 @@ function toCarouselPublicState(
       scale: item.scale.value,
     };
   }
-  return { carouselTranslateX: state.carousel.value, items };
+  return { carouselTranslateX: state.carousel.x.value, items };
 }
 
 export function createCarouselModel(
@@ -195,6 +169,14 @@ function createCarouselReduce(config: CarouselConfig) {
   const itemReduce = createTransformReduce({
     bounds: (scale) => getItemBounds(scale, itemWidth, itemHeight),
     snapTarget: (t) => (t.scale.value < 1 ? { x: 0, y: 0, scale: 1 } : null),
+  });
+
+  const carouselReduce = createTransformReduce({
+    snapTarget: (t) => ({
+      x: computeCarouselSnapTarget(t.x.value, itemWidth, itemIds.length),
+      y: 0,
+      scale: 1,
+    }),
   });
 
   function makeInitialItems(): Record<string, TransformPrivateState> {
@@ -248,117 +230,59 @@ function createCarouselReduce(config: CarouselConfig) {
 
   return function reduce(
     state: CarouselPrivateState | undefined = {
-      type: "settled",
-      carousel: createLinearPrimitive(0),
+      type: "free",
+      carousel: {
+        type: "settled",
+        x: createLinearPrimitive(0),
+        y: createLinearPrimitive(0),
+        scale: createExponentialPrimitive(1),
+      },
       items: makeInitialItems(),
     },
     action: StoreAction,
   ): CarouselPrivateState {
     switch (state.type) {
-      case "settled": {
+      case "free": {
         switch (action.type) {
           case "motion": {
-            const target = resolveMotionTarget(action, state.items);
-            if (target.type === "locked") {
-              return {
-                type: "locked",
-                carousel: state.carousel,
-                items: lockItems(state.items, target.itemId, action),
-              };
+            if (state.carousel.type === "settled") {
+              const target = resolveMotionTarget(action, state.items);
+              if (target.type === "locked") {
+                return {
+                  type: "locked",
+                  carousel: state.carousel,
+                  items: lockItems(state.items, target.itemId, action),
+                };
+              }
             }
-            return {
-              type: "scrolling",
-              carousel: applyLinearDelta(
-                state.carousel,
-                action.dx,
-                action.timestamp,
-              ),
-              items: state.items,
+            // Item-targeted gestures cannot interrupt a snap.
+            if (
+              state.carousel.type === "snapping" &&
+              action.itemId !== undefined
+            ) {
+              return state;
+            }
+            const normalizedAction = {
+              ...action,
+              dy: 0,
+              dScale: 1,
+              originX: 0,
+              originY: 0,
             };
+            const carousel = carouselReduce(state.carousel, normalizedAction);
+            return { ...state, carousel };
           }
-          case "release":
-            return state;
-          case "tick": {
-            const items = advanceAllItems(state.items, action.timestamp);
-            return items === state.items ? state : { ...state, items };
-          }
-        }
-        throw new Error("unreachable");
-      }
-
-      case "scrolling": {
-        switch (action.type) {
-          case "motion":
-            return {
-              ...state,
-              carousel: applyLinearDelta(
-                state.carousel,
-                action.dx,
-                action.timestamp,
-              ),
-            };
           case "release": {
-            const carouselTarget = computeCarouselSnapTarget(
-              state.carousel.value,
-              itemWidth,
-              itemIds.length,
-            );
-            return {
-              type: "snapping",
-              carousel: state.carousel,
-              carouselTarget,
-              items: state.items,
-            };
+            const carousel = carouselReduce(state.carousel, action);
+            if (carousel === state.carousel) return state;
+            return { ...state, carousel };
           }
           case "tick": {
+            const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);
-            return items === state.items ? state : { ...state, items };
-          }
-        }
-        throw new Error("unreachable");
-      }
-
-      case "snapping": {
-        switch (action.type) {
-          case "motion": {
-            // Allow the user to interrupt a snap by scrolling (no itemId), but
-            // ignore item-targeted motions since locked can only be entered from settled.
-            if (action.itemId !== undefined) return state;
-            return {
-              type: "scrolling",
-              carousel: applyLinearDelta(
-                state.carousel,
-                action.dx,
-                action.timestamp,
-              ),
-              items: state.items,
-            };
-          }
-          case "release":
-            return state;
-          case "tick": {
-            const { carouselTarget } = state;
-            const items = advanceAllItems(state.items, action.timestamp);
-            if (isCarouselSettled(state.carousel, carouselTarget)) {
-              return {
-                type: "settled",
-                carousel: {
-                  value: carouselTarget,
-                  velocity: 0,
-                  lastUpdatedAt: action.timestamp,
-                },
-                items,
-              };
-            }
-            return {
-              ...state,
-              carousel: advanceLinearSpring(
-                state.carousel,
-                carouselTarget,
-                action.timestamp,
-              ),
-              items,
-            };
+            if (carousel === state.carousel && items === state.items)
+              return state;
+            return { ...state, carousel, items };
           }
         }
         throw new Error("unreachable");
@@ -380,21 +304,14 @@ function createCarouselReduce(config: CarouselConfig) {
           }
           case "release": {
             const trackingId = findTrackingItemId(state.items);
-            if (trackingId === undefined) {
-              return {
-                type: "settled",
-                carousel: state.carousel,
-                items: state.items,
-              };
-            }
-            return {
-              type: "settled",
-              carousel: state.carousel,
-              items: {
-                ...state.items,
-                [trackingId]: itemReduce(state.items[trackingId], action),
-              },
-            };
+            const items =
+              trackingId !== undefined
+                ? {
+                    ...state.items,
+                    [trackingId]: itemReduce(state.items[trackingId], action),
+                  }
+                : state.items;
+            return { type: "free", carousel: state.carousel, items };
           }
           case "tick": {
             const items = advanceAllItems(state.items, action.timestamp);

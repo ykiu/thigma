@@ -19,20 +19,6 @@ export function computeDtMs(lastUpdatedAt: number, timestamp: number): number {
 }
 
 /**
- * Apply a delta to a LinearPrimitive and update velocity.
- */
-export function applyLinearDelta(
-  prim: LinearPrimitive,
-  delta: number,
-  timestamp: number,
-): LinearPrimitive {
-  const dtMs = computeDtMs(prim.lastUpdatedAt, timestamp);
-  const newValue = prim.value + delta;
-  const velocity = dtMs > 0 ? delta / dtMs : 0;
-  return { value: newValue, velocity, lastUpdatedAt: timestamp };
-}
-
-/**
  * ExponentialPrimitive tracks a multiplicative value (e.g. scale).
  * Uses log-space internally for natural inertia behaviour.
  * logVelocity is expressed in log-units per millisecond.
