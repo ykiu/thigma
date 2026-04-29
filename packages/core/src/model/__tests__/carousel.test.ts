@@ -395,8 +395,7 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state = reduce(makeLockedState(), { type: "release" });
       expect(state.type).toBe("settled");
-      // item had no velocity → settled
-      expect(state.items.a.type).toBe("settled");
+      expect(state.items.a.type).toBe("inertia");
     });
 
     it("item transitions to inertia on release when it has significant velocity", () => {

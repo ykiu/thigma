@@ -58,32 +58,10 @@ export type TransformPrivateState =
       scale: ExponentialPrimitive;
     };
 
-type SnappingState = Extract<TransformPrivateState, { type: "snapping" }>;
-
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
 const LOG_VELOCITY_THRESHOLD = 0.0001; // log-units/ms
-
-function hasSignificantVelocity(state: {
-  x: LinearPrimitive;
-  y: LinearPrimitive;
-  scale: ExponentialPrimitive;
-}): boolean {
-  return (
-    Math.abs(state.x.velocity) > VELOCITY_THRESHOLD ||
-    Math.abs(state.y.velocity) > VELOCITY_THRESHOLD ||
-    Math.abs(state.scale.logVelocity) > LOG_VELOCITY_THRESHOLD
-  );
-}
-
-function isSnapSettled(state: SnappingState): boolean {
-  return (
-    Math.abs(state.x.value - state.target.x) < SNAP_THRESHOLD &&
-    Math.abs(state.y.value - state.target.y) < SNAP_THRESHOLD &&
-    Math.abs(state.scale.value - state.target.scale) < SCALE_SNAP_THRESHOLD
-  );
-}
 
 export function settleTransform(state: {
   x: LinearPrimitive;
@@ -95,18 +73,6 @@ export function settleTransform(state: {
     x: { ...state.x, velocity: 0 },
     y: { ...state.y, velocity: 0 },
     scale: { ...state.scale, logVelocity: 0 },
-  };
-}
-
-function settleAtTarget(
-  target: TransformSnapTarget,
-  timestamp: number,
-): Extract<TransformPrivateState, { type: "settled" }> {
-  return {
-    type: "settled",
-    x: { value: target.x, velocity: 0, lastUpdatedAt: timestamp },
-    y: { value: target.y, velocity: 0, lastUpdatedAt: timestamp },
-    scale: { value: target.scale, logVelocity: 0, lastUpdatedAt: timestamp },
   };
 }
 
@@ -176,16 +142,13 @@ export function createTransformReduce(config?: TransformConfig) {
                   target,
                 };
             }
-            if (hasSignificantVelocity(state)) {
-              return {
-                type: "inertia",
-                x: state.x,
-                y: state.y,
-                scale: state.scale,
-                origin: state.origin,
-              };
-            }
-            return settleTransform(state);
+            return {
+              type: "inertia",
+              x: state.x,
+              y: state.y,
+              scale: state.scale,
+              origin: state.origin,
+            };
           }
           case "tick":
             return state;
@@ -218,42 +181,43 @@ export function createTransformReduce(config?: TransformConfig) {
           }
           case "tick": {
             const timestamp = action.timestamp;
-            if (hasSignificantVelocity(state)) {
-              // Advance inertia
-              const oldScale = state.scale.value;
-              const newScale = advanceExponentialInertia(
-                state.scale,
-                timestamp,
-              );
-              const ds = newScale.value / oldScale;
-
-              const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
-              const retainedFactor = 0.99 ** dtMs;
-              const newVx = state.x.velocity * retainedFactor;
-              const newVy = state.y.velocity * retainedFactor;
-
-              return {
-                ...state,
-                x: {
-                  value:
-                    state.origin.x +
-                    (state.x.value - state.origin.x) * ds +
-                    newVx * dtMs,
-                  velocity: newVx,
-                  lastUpdatedAt: timestamp,
-                },
-                y: {
-                  value:
-                    state.origin.y +
-                    (state.y.value - state.origin.y) * ds +
-                    newVy * dtMs,
-                  velocity: newVy,
-                  lastUpdatedAt: timestamp,
-                },
-                scale: newScale,
-              };
+            if (
+              Math.abs(state.x.velocity) < VELOCITY_THRESHOLD &&
+              Math.abs(state.y.velocity) < VELOCITY_THRESHOLD &&
+              Math.abs(state.scale.logVelocity) < LOG_VELOCITY_THRESHOLD
+            ) {
+              return settleTransform(state);
             }
-            return settleTransform(state);
+            // Advance inertia
+            const oldScale = state.scale.value;
+            const newScale = advanceExponentialInertia(state.scale, timestamp);
+            const ds = newScale.value / oldScale;
+
+            const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
+            const retainedFactor = 0.99 ** dtMs;
+            const newVx = state.x.velocity * retainedFactor;
+            const newVy = state.y.velocity * retainedFactor;
+
+            return {
+              ...state,
+              x: {
+                value:
+                  state.origin.x +
+                  (state.x.value - state.origin.x) * ds +
+                  newVx * dtMs,
+                velocity: newVx,
+                lastUpdatedAt: timestamp,
+              },
+              y: {
+                value:
+                  state.origin.y +
+                  (state.y.value - state.origin.y) * ds +
+                  newVy * dtMs,
+                velocity: newVy,
+                lastUpdatedAt: timestamp,
+              },
+              scale: newScale,
+            };
           }
         }
         throw new Error("unreachable");
@@ -271,8 +235,30 @@ export function createTransformReduce(config?: TransformConfig) {
           case "release":
             return state;
           case "tick": {
-            if (isSnapSettled(state)) {
-              return settleAtTarget(state.target, action.timestamp);
+            if (
+              Math.abs(state.x.value - state.target.x) < SNAP_THRESHOLD &&
+              Math.abs(state.y.value - state.target.y) < SNAP_THRESHOLD &&
+              Math.abs(state.scale.value - state.target.scale) <
+                SCALE_SNAP_THRESHOLD
+            ) {
+              return {
+                type: "settled",
+                x: {
+                  value: state.target.x,
+                  velocity: 0,
+                  lastUpdatedAt: action.timestamp,
+                },
+                y: {
+                  value: state.target.y,
+                  velocity: 0,
+                  lastUpdatedAt: action.timestamp,
+                },
+                scale: {
+                  value: state.target.scale,
+                  logVelocity: 0,
+                  lastUpdatedAt: action.timestamp,
+                },
+              };
             }
             return {
               ...state,
