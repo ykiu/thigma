@@ -18,6 +18,15 @@ export type InterpreterEvent =
       type: "release";
       /** Identifies the item being released. Absent for container-level gestures. */
       itemId?: string;
+    }
+  | {
+      type: "toggle-zoom";
+      /** Identifies the item being double-tapped. Absent for container-level gestures. */
+      itemId?: string;
+      /** Double-tap position relative to the element's top-left corner (px). */
+      originX: number;
+      originY: number;
+      timestamp: number;
     };
 
 // TODO: Move to a new module

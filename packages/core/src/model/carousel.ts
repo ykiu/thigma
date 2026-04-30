@@ -273,6 +273,18 @@ function createCarouselReduce(config: CarouselConfig) {
           }
           case "release":
             return state;
+          case "toggle-zoom": {
+            if (action.itemId === undefined) return state;
+            const item = state.items[action.itemId];
+            if (!item) return state;
+            return {
+              ...state,
+              items: {
+                ...state.items,
+                [action.itemId]: itemReduce(item, action),
+              },
+            };
+          }
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);
@@ -309,6 +321,8 @@ function createCarouselReduce(config: CarouselConfig) {
             const carousel = carouselReduce(state.carousel, action);
             return { type: "free", carousel, items: state.items };
           }
+          case "toggle-zoom":
+            return state;
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);
@@ -344,6 +358,19 @@ function createCarouselReduce(config: CarouselConfig) {
               ),
             };
             return { type: "free", carousel: state.carousel, items };
+          }
+          case "toggle-zoom": {
+            if (action.itemId !== state.activeItemId) return state;
+            return {
+              ...state,
+              items: {
+                ...state.items,
+                [state.activeItemId]: itemReduce(
+                  state.items[state.activeItemId],
+                  action,
+                ),
+              },
+            };
           }
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
