@@ -19,6 +19,7 @@ packages/
         touch.ts
         mouse-drag.ts
         mouse-wheel.ts
+        double-tap.ts
         index.ts
       store/
         primitives.ts    # LinearPrimitive, ExponentialPrimitive

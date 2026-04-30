@@ -46,12 +46,13 @@ type Motion = {
 };
 ```
 
-**InterpreterEvent** is the output of an Interpreter. It is a tagged union that covers both gesture movement and the moment the user releases the gesture.
+**InterpreterEvent** is the output of an Interpreter. It is a tagged union that covers gesture movement, the moment the user releases the gesture, and discrete tap gestures.
 
 ```typescript
 type InterpreterEvent =
-  | ({ type: 'motion'; itemId?: string; timestamp: number } & Motion) // user is actively gesturing
-  | { type: 'release'; itemId?: string };                             // user lifted all fingers / released the mouse button
+  | ({ type: 'motion'; itemId?: string; timestamp: number } & Motion)                                        // user is actively gesturing
+  | { type: 'release'; itemId?: string }                                                                      // user lifted all fingers / released the mouse button
+  | { type: 'toggle-zoom'; itemId?: string; originX: number; originY: number; timestamp: number };           // double-tap: zoom in if at normal scale, zoom out otherwise
 ```
 
 The optional `itemId` field identifies which item within a multi-item container (e.g. a carousel) the gesture targets. It is absent for container-level gestures such as swiping the carousel strip itself.
@@ -116,6 +117,7 @@ type MountedInterpreter = {
 declare function touchInterpreter(): Interpreter;
 declare function mouseDragInterpreter(): Interpreter;
 declare function mouseWheelInterpreter(): Interpreter;
+declare function doubleTapInterpreter(): Interpreter;
 ```
 
 Implementation details:
@@ -124,6 +126,7 @@ Implementation details:
 - **touchInterpreter**: A factory function for an interpreter that handles touch events. Tracks multiple touch points and identifies gestures such as pinch and pan.
 - **mouseDragInterpreter**: A factory function for an interpreter that handles mouse drag events. Tracks mouse movement and identifies pan gestures.
 - **mouseWheelInterpreter**: A factory function for an interpreter that handles mouse wheel events. Tracks wheel rotation and identifies zoom gestures.
+- **doubleTapInterpreter**: A factory function for an interpreter that detects double-tap gestures. Handles the native `dblclick` event for mouse and manually tracks two consecutive single-finger touches within a time and distance threshold for touch. Emits `toggle-zoom`.
 
 ### State Representation
 
@@ -131,6 +134,7 @@ Each stateful interpreter models its internal state as a tagged union following 
 
 - `touchInterpreter`: `no_touch | single_touch | multi_touch`
 - `mouseDragInterpreter`: `idle | dragging`
+- `doubleTapInterpreter`: `idle | awaiting_second_tap`
 
 For example, a `single_touch` state necessarily carries exactly one touch point, and a `multi_touch` state necessarily carries exactly two. `touchInterpreter` can transition `no_touch → single_touch` and `single_touch → multi_touch`, but not `no_touch → multi_touch` directly.
 

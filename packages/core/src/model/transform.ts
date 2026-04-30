@@ -25,6 +25,8 @@ export type TransformConfig = {
     y: LinearPrimitive;
     scale: ExponentialPrimitive;
   }) => TransformSnapTarget | null;
+  /** Scale factor to apply when zooming in via double-tap. Defaults to 2. */
+  toggleZoomScale?: number;
 };
 
 type Origin = { x: number; y: number };
@@ -77,7 +79,30 @@ export function settleTransform(state: {
 }
 
 export function createTransformReduce(config?: TransformConfig) {
-  const { bounds, snapTarget } = config ?? {};
+  const { bounds, snapTarget, toggleZoomScale = 2 } = config ?? {};
+
+  function computeToggleZoomTarget(
+    state: {
+      x: LinearPrimitive;
+      y: LinearPrimitive;
+      scale: ExponentialPrimitive;
+    },
+    originX: number,
+    originY: number,
+  ): TransformSnapTarget {
+    if (Math.abs(state.scale.value - 1) < 0.01) {
+      const ds = toggleZoomScale / state.scale.value;
+      let targetX = originX * (1 - ds) + state.x.value * ds;
+      let targetY = originY * (1 - ds) + state.y.value * ds;
+      if (bounds) {
+        const b = bounds(toggleZoomScale);
+        targetX = Math.max(b.minX, Math.min(b.maxX, targetX));
+        targetY = Math.max(b.minY, Math.min(b.maxY, targetY));
+      }
+      return { x: targetX, y: targetY, scale: toggleZoomScale };
+    }
+    return { x: 0, y: 0, scale: 1 };
+  }
 
   return function reduce(
     state: TransformPrivateState | undefined = {
@@ -152,6 +177,8 @@ export function createTransformReduce(config?: TransformConfig) {
           }
           case "tick":
             return state;
+          case "toggle-zoom":
+            return state;
         }
         throw new Error("unreachable");
       }
@@ -219,6 +246,18 @@ export function createTransformReduce(config?: TransformConfig) {
               scale: newScale,
             };
           }
+          case "toggle-zoom":
+            return {
+              type: "snapping",
+              x: state.x,
+              y: state.y,
+              scale: state.scale,
+              target: computeToggleZoomTarget(
+                state,
+                action.originX,
+                action.originY,
+              ),
+            };
         }
         throw new Error("unreachable");
       }
@@ -233,6 +272,8 @@ export function createTransformReduce(config?: TransformConfig) {
               scale: state.scale,
             };
           case "release":
+            return state;
+          case "toggle-zoom":
             return state;
           case "tick": {
             if (
@@ -292,6 +333,18 @@ export function createTransformReduce(config?: TransformConfig) {
             return state;
           case "tick":
             return state;
+          case "toggle-zoom":
+            return {
+              type: "snapping",
+              x: state.x,
+              y: state.y,
+              scale: state.scale,
+              target: computeToggleZoomTarget(
+                state,
+                action.originX,
+                action.originY,
+              ),
+            };
         }
         throw new Error("unreachable");
       }

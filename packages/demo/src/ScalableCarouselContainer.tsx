@@ -7,6 +7,7 @@ import {
   type MountedInterpreter,
   type InterpreterEvent,
   mouseWheelInterpreter,
+  doubleTapInterpreter,
 } from "@mimosa/core";
 
 type ScalableCarouselItem = {
@@ -57,6 +58,7 @@ export function ScalableCarouselContainer({
         withItemId(touchInterpreter()(viewport), item.id),
         withItemId(mouseDragInterpreter()(viewport), item.id),
         withItemId(mouseWheelInterpreter()(viewport), item.id),
+        withItemId(doubleTapInterpreter()(viewport), item.id),
       );
     }
 

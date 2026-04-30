@@ -795,6 +795,110 @@ describe("createCarouselModel", () => {
   });
 
   // -------------------------------------------------------------------------
+  // toggle-zoom
+  // -------------------------------------------------------------------------
+
+  describe("toggle-zoom", () => {
+    function toggleZoom(
+      opts: Partial<{ itemId: string; originX: number; originY: number }> = {},
+    ) {
+      return {
+        type: "toggle-zoom" as const,
+        originX: 0,
+        originY: 0,
+        timestamp: 0,
+        ...opts,
+      };
+    }
+
+    it("free state: routes to the targeted item", () => {
+      const reduce = makeReduce();
+      const state = reduce(free(), toggleZoom({ itemId: "a" }));
+      expect(state.type).toBe("free");
+      expect(state.items.a.type).toBe("snapping");
+      expect(state.items.b.type).toBe("settled");
+    });
+
+    it("free state: zooms in to 2x centered at origin", () => {
+      const reduce = makeReduce();
+      const state = reduce(
+        free(),
+        toggleZoom({ itemId: "a", originX: 100, originY: 80 }),
+      );
+      expect(state.items.a.type).toBe("snapping");
+      if (state.items.a.type === "snapping") {
+        expect(state.items.a.target.scale).toBe(2);
+        expect(state.items.a.target.x).toBeCloseTo(-100);
+        expect(state.items.a.target.y).toBeCloseTo(-80);
+      }
+    });
+
+    it("free state: zooms out when item is already zoomed in", () => {
+      const reduce = makeReduce();
+      const state = reduce(
+        free(0, { a: { x: -50, y: -50, scale: 2 } }),
+        toggleZoom({ itemId: "a" }),
+      );
+      expect(state.items.a.type).toBe("snapping");
+      if (state.items.a.type === "snapping") {
+        expect(state.items.a.target).toEqual({ x: 0, y: 0, scale: 1 });
+      }
+    });
+
+    it("free state: ignored when itemId is absent (same reference)", () => {
+      const reduce = makeReduce();
+      const before = free();
+      expect(reduce(before, toggleZoom())).toBe(before);
+    });
+
+    it("free state: ignored for unknown itemId (same reference)", () => {
+      const reduce = makeReduce();
+      const before = free();
+      expect(reduce(before, toggleZoom({ itemId: "unknown" }))).toBe(before);
+    });
+
+    it("carousel state: ignored (same reference)", () => {
+      const reduce = makeReduce();
+      const before = makeCarouselTrackingState();
+      expect(reduce(before, toggleZoom({ itemId: "a" }))).toBe(before);
+    });
+
+    it("items state: routes to the active item", () => {
+      const reduce = makeReduce();
+      // item "a" is settled and zoomed in; toggle-zoom should snap it back out
+      const itemsWithSettledItem: CarouselPrivateState = {
+        type: "items",
+        carousel: makeSettledCarousel(),
+        items: {
+          a: makeSettledItem(-50, -50, 2),
+          b: makeSettledItem(),
+          c: makeSettledItem(),
+        },
+        activeItemId: "a",
+      };
+      const state = reduce(itemsWithSettledItem, toggleZoom({ itemId: "a" }));
+      expect(state.type).toBe("items");
+      expect(state.items.a.type).toBe("snapping");
+    });
+
+    it("items state: ignored for a non-active item (same reference)", () => {
+      const reduce = makeReduce();
+      // item "a" is settled and zoomed in
+      const before: CarouselPrivateState = {
+        type: "items",
+        carousel: makeSettledCarousel(),
+        items: {
+          a: makeSettledItem(-50, -50, 2),
+          b: makeSettledItem(),
+          c: makeSettledItem(),
+        },
+        activeItemId: "a",
+      };
+      expect(reduce(before, toggleZoom({ itemId: "b" }))).toBe(before);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // publish
   // -------------------------------------------------------------------------
 
