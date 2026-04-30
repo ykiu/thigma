@@ -207,8 +207,7 @@ describe("createCarouselModel", () => {
       const state = reduce(free(), motion({ dx: -50 }));
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
-      // First tracking update establishes origin; position unchanged
-      expect(state.carousel.x.value).toBeCloseTo(0);
+      expect(state.carousel.x.value).toBeCloseTo(-50);
     });
 
     it("transitions to carousel when item at scale=1 is panned (carousel moves, item stays)", () => {
@@ -216,7 +215,7 @@ describe("createCarouselModel", () => {
       const state = reduce(free(), motion({ itemId: "a", dx: -80 }));
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
-      expect(state.carousel.x.value).toBeCloseTo(0);
+      expect(state.carousel.x.value).toBeCloseTo(-80);
       expect(state.items.a.x.value).toBe(0);
     });
 
