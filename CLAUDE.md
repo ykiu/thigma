@@ -15,7 +15,8 @@ When making changes to the codebase, follow this workflow:
 
 1. Plan your change.
 2. Ask for feedback on your plan.
-3. Implement your change.
-4. Run code quality checks
+3. Add tests for your change and verify they fail.
+4. Implement your change.
+5. Run code quality checks
    `npm run tsc && npm run format && npm run lint && npm run test`.
-5. Update documents as needed.
+6. Update documents as needed.
