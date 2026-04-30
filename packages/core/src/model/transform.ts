@@ -277,13 +277,17 @@ export function createTransformReduce(config?: TransformConfig) {
       case "settled": {
         switch (action.type) {
           case "motion":
-            return {
-              type: "tracking",
-              origin: { x: 0, y: 0 },
-              x: state.x,
-              y: state.y,
-              scale: state.scale,
-            };
+            // Transition to tracking then immediately apply the delta.
+            return reduce(
+              {
+                type: "tracking",
+                origin: { x: 0, y: 0 },
+                x: state.x,
+                y: state.y,
+                scale: state.scale,
+              },
+              action,
+            );
           case "release":
             return state;
           case "tick":
