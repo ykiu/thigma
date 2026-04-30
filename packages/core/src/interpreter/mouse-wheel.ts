@@ -46,6 +46,18 @@ export function mouseWheelInterpreter(): Interpreter {
         originX,
         originY,
       });
+      emit({
+        type: "motion",
+        timestamp: e.timeStamp,
+        dx: 0,
+        dy: 0,
+        dScale: 1,
+        originX,
+        originY,
+      });
+      emit({
+        type: "release",
+      });
     }
 
     element.addEventListener("wheel", onWheel as EventListener, {
