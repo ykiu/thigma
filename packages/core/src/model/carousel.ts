@@ -93,6 +93,19 @@ function getItemBounds(
   };
 }
 
+function isHorizontalOverscroll(
+  item: TransformPrivateState,
+  dx: number,
+  itemWidth: number,
+  itemHeight: number,
+): boolean {
+  const bounds = getItemBounds(item.scale.value, itemWidth, itemHeight);
+  return (
+    (dx > 0 && item.x.value >= bounds.maxX) ||
+    (dx < 0 && item.x.value <= bounds.minX)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Carousel-level helpers
 // ---------------------------------------------------------------------------
@@ -225,13 +238,25 @@ function createCarouselReduce(config: CarouselConfig) {
                   const isZoomed = item.scale.value !== 1;
                   const isInMotion = item.type !== "settled";
                   if (action.dScale !== 1 || isZoomed || isInMotion) {
-                    // Lock to item
-                    return {
-                      type: "items",
-                      carousel: state.carousel,
-                      items: lockItems(state.items, action.itemId, action),
-                      activeItemId: action.itemId,
-                    };
+                    const overscroll =
+                      isZoomed &&
+                      !isInMotion &&
+                      action.dScale === 1 &&
+                      isHorizontalOverscroll(
+                        item,
+                        action.dx,
+                        itemWidth,
+                        itemHeight,
+                      );
+                    if (!overscroll) {
+                      // Lock to item
+                      return {
+                        type: "items",
+                        carousel: state.carousel,
+                        items: lockItems(state.items, action.itemId, action),
+                        activeItemId: action.itemId,
+                      };
+                    }
                   }
                 }
               }

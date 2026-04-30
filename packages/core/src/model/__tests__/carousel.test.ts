@@ -219,6 +219,40 @@ describe("createCarouselModel", () => {
       expect(state.items.a.x.value).toBe(0);
     });
 
+    it("transitions to carousel when zoomed item overscrolls right (at right edge, dx > 0)", () => {
+      const reduce = makeReduce();
+      // item a: zoomed to scale=2, x=0 (right edge, maxX=0)
+      const state = reduce(
+        free(0, { a: { x: 0, y: 0, scale: 2 } }),
+        motion({ itemId: "a", dx: 50 }),
+      );
+      expect(state.type).toBe("carousel");
+      expect(state.carousel.type).toBe("tracking");
+      expect(state.carousel.x.value).toBeCloseTo(50);
+    });
+
+    it("transitions to carousel when zoomed item overscrolls left (at left edge, dx < 0)", () => {
+      const reduce = makeReduce();
+      // item a: zoomed to scale=2, x=minX=-400 (left edge)
+      const state = reduce(
+        free(0, { a: { x: -ITEM_WIDTH, y: 0, scale: 2 } }),
+        motion({ itemId: "a", dx: -50 }),
+      );
+      expect(state.type).toBe("carousel");
+      expect(state.carousel.type).toBe("tracking");
+      expect(state.carousel.x.value).toBeCloseTo(-50);
+    });
+
+    it("does not transition to carousel when zoomed item is panned within bounds", () => {
+      const reduce = makeReduce();
+      // item a: zoomed to scale=2, x=-200 (middle, minX=-400, maxX=0)
+      const state = reduce(
+        free(0, { a: { x: -200, y: 0, scale: 2 } }),
+        motion({ itemId: "a", dx: -50 }),
+      );
+      expect(state.type).toBe("items");
+    });
+
     it("transitions to items when a zoomed-in item is panned", () => {
       const reduce = makeReduce();
       let state = reduce(
@@ -332,7 +366,7 @@ describe("createCarouselModel", () => {
     it("snap target stays at 0 when swiped less than halfway to next item", () => {
       const reduce = makeReduce();
       let state = reduce(free(), motion());
-      state = reduce(state, motion({ dx: -190 })); // first tracking motion: origin at 0, dx ignored
+      state = reduce(state, motion({ dx: -190 })); // → x = -190, still snaps to 0 (< halfway to next item)
       state = reduce(state, { type: "release" });
       if (state.carousel.type === "snapping") {
         expect(state.carousel.target.x).toBeCloseTo(0);
