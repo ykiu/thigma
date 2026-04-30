@@ -40,8 +40,6 @@ export type CarouselPublicState = {
  * Carousel-level phase.
  *
  *   free          — no active gesture; animations may still be running.
- *   indeterminate — entered on the first motion from free; the next motion
- *                   determines whether to scroll the carousel or pan/zoom an item.
  *   carousel      — gesture is scrolling the carousel strip.
  *   items         — gesture is targeting activeItemId for pan/zoom.
  *
@@ -50,11 +48,6 @@ export type CarouselPublicState = {
 export type CarouselPrivateState =
   | {
       type: "free";
-      carousel: TransformPrivateState;
-      items: Record<string, TransformPrivateState>;
-    }
-  | {
-      type: "indeterminate";
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
@@ -98,6 +91,19 @@ function getItemBounds(
     minY: itemHeight * (1 - scale),
     maxY: 0,
   };
+}
+
+function isHorizontalOverscroll(
+  item: TransformPrivateState,
+  dx: number,
+  itemWidth: number,
+  itemHeight: number,
+): boolean {
+  const bounds = getItemBounds(item.scale.value, itemWidth, itemHeight);
+  return (
+    (dx > 0 && item.x.value >= bounds.maxX) ||
+    (dx < 0 && item.x.value <= bounds.minX)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,23 +228,6 @@ function createCarouselReduce(config: CarouselConfig) {
     switch (state.type) {
       case "free": {
         switch (action.type) {
-          case "motion":
-            return { ...state, type: "indeterminate" };
-          case "release":
-            return state;
-          case "tick": {
-            const carousel = carouselReduce(state.carousel, action);
-            const items = advanceAllItems(state.items, action.timestamp);
-            if (carousel === state.carousel && items === state.items)
-              return state;
-            return { ...state, carousel, items };
-          }
-        }
-        throw new Error("unreachable");
-      }
-
-      case "indeterminate": {
-        switch (action.type) {
           case "motion": {
             // Determine whether a motion event should lock the carousel to an item
             // or scroll the carousel strip.
@@ -249,13 +238,25 @@ function createCarouselReduce(config: CarouselConfig) {
                   const isZoomed = item.scale.value !== 1;
                   const isInMotion = item.type !== "settled";
                   if (action.dScale !== 1 || isZoomed || isInMotion) {
-                    // Lock to item
-                    return {
-                      type: "items",
-                      carousel: state.carousel,
-                      items: lockItems(state.items, action.itemId, action),
-                      activeItemId: action.itemId,
-                    };
+                    const overscroll =
+                      isZoomed &&
+                      !isInMotion &&
+                      action.dScale === 1 &&
+                      isHorizontalOverscroll(
+                        item,
+                        action.dx,
+                        itemWidth,
+                        itemHeight,
+                      );
+                    if (!overscroll) {
+                      // Lock to item
+                      return {
+                        type: "items",
+                        carousel: state.carousel,
+                        items: lockItems(state.items, action.itemId, action),
+                        activeItemId: action.itemId,
+                      };
+                    }
                   }
                 }
               }
@@ -271,11 +272,7 @@ function createCarouselReduce(config: CarouselConfig) {
             return { type: "carousel", carousel, items: state.items };
           }
           case "release":
-            return {
-              type: "free",
-              carousel: state.carousel,
-              items: state.items,
-            };
+            return state;
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);

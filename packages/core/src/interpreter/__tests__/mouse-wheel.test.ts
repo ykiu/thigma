@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { InterpreterEvent } from "../../types.js";
 import { mouseWheelInterpreter } from "../mouse-wheel.js";
 
 describe("mouseWheelInterpreter", () => {
@@ -26,8 +27,8 @@ describe("mouseWheelInterpreter", () => {
 
   it("emits zoom-in motion on negative deltaY", () => {
     const interpreter = mouseWheelInterpreter()(element);
-    const motions: { dScale: number }[] = [];
-    interpreter.subscribe((m) => motions.push(m as { dScale: number }));
+    const motions: InterpreterEvent[] = [];
+    interpreter.subscribe((m) => motions.push(m));
 
     element.dispatchEvent(
       new WheelEvent("wheel", {
@@ -38,16 +39,24 @@ describe("mouseWheelInterpreter", () => {
       }),
     );
 
-    expect(motions).toHaveLength(1);
-    expect(motions[0].dScale).toBeGreaterThan(1); // scrolling up = zoom in
+    expect(motions).toHaveLength(3);
+    expect(motions[0].type).toBe("motion");
+    if (motions[0].type === "motion") {
+      expect(motions[0].dScale).toBeGreaterThan(1); // scrolling up = zoom in
+    }
+    expect(motions[1].type).toBe("motion");
+    if (motions[1].type === "motion") {
+      expect(motions[1].dScale).toEqual(1); // scrolling up = zoom in
+    }
+    expect(motions[2].type).toBe("release");
 
     interpreter.unmount();
   });
 
   it("emits zoom-out motion on positive deltaY", () => {
     const interpreter = mouseWheelInterpreter()(element);
-    const motions: { dScale: number }[] = [];
-    interpreter.subscribe((m) => motions.push(m as { dScale: number }));
+    const motions: InterpreterEvent[] = [];
+    interpreter.subscribe((m) => motions.push(m as InterpreterEvent));
 
     element.dispatchEvent(
       new WheelEvent("wheel", {
@@ -58,9 +67,11 @@ describe("mouseWheelInterpreter", () => {
       }),
     );
 
-    expect(motions).toHaveLength(1);
-    expect(motions[0].dScale).toBeLessThan(1); // scrolling down = zoom out
-
+    expect(motions).toHaveLength(3);
+    expect(motions[0].type).toBe("motion");
+    if (motions[0].type === "motion") {
+      expect(motions[0].dScale).toBeLessThan(1); // scrolling down = zoom out
+    }
     interpreter.unmount();
   });
 
