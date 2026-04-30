@@ -40,8 +40,6 @@ export type CarouselPublicState = {
  * Carousel-level phase.
  *
  *   free          — no active gesture; animations may still be running.
- *   indeterminate — entered on the first motion from free; the next motion
- *                   determines whether to scroll the carousel or pan/zoom an item.
  *   carousel      — gesture is scrolling the carousel strip.
  *   items         — gesture is targeting activeItemId for pan/zoom.
  *
@@ -50,11 +48,6 @@ export type CarouselPublicState = {
 export type CarouselPrivateState =
   | {
       type: "free";
-      carousel: TransformPrivateState;
-      items: Record<string, TransformPrivateState>;
-    }
-  | {
-      type: "indeterminate";
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
@@ -222,23 +215,6 @@ function createCarouselReduce(config: CarouselConfig) {
     switch (state.type) {
       case "free": {
         switch (action.type) {
-          case "motion":
-            return { ...state, type: "indeterminate" };
-          case "release":
-            return state;
-          case "tick": {
-            const carousel = carouselReduce(state.carousel, action);
-            const items = advanceAllItems(state.items, action.timestamp);
-            if (carousel === state.carousel && items === state.items)
-              return state;
-            return { ...state, carousel, items };
-          }
-        }
-        throw new Error("unreachable");
-      }
-
-      case "indeterminate": {
-        switch (action.type) {
           case "motion": {
             // Determine whether a motion event should lock the carousel to an item
             // or scroll the carousel strip.
@@ -271,11 +247,7 @@ function createCarouselReduce(config: CarouselConfig) {
             return { type: "carousel", carousel, items: state.items };
           }
           case "release":
-            return {
-              type: "free",
-              carousel: state.carousel,
-              items: state.items,
-            };
+            return state;
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);

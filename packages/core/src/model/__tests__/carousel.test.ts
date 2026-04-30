@@ -185,21 +185,6 @@ describe("createCarouselModel", () => {
       expect(reduce(state, { type: "release" })).toBe(state);
     });
 
-    it("transitions to indeterminate on motion (no itemId)", () => {
-      const reduce = makeReduce();
-      const state = reduce(free(), motion({ dx: -50 }));
-      expect(state.type).toBe("indeterminate");
-      expect(state.carousel.type).toBe("settled");
-    });
-
-    it("transitions to indeterminate on motion (with itemId)", () => {
-      const reduce = makeReduce();
-      const state = reduce(free(), motion({ itemId: "a", dx: -50 }));
-      expect(state.type).toBe("indeterminate");
-      expect(state.carousel.type).toBe("settled");
-      expect(state.items.a.x.value).toBe(0);
-    });
-
     it("advances inertia items on tick (parallel operation)", () => {
       const reduce = makeReduce();
       const state: CarouselPrivateState = {
@@ -216,43 +201,10 @@ describe("createCarouselModel", () => {
       expect(next.items.a.type).toBe("inertia");
       expect(next.items.a.x.value).toBeLessThan(-50);
     });
-  });
-
-  // -------------------------------------------------------------------------
-  // indeterminate state
-  // -------------------------------------------------------------------------
-
-  describe("indeterminate state", () => {
-    it("returns to free on release", () => {
-      const reduce = makeReduce();
-      const indeterminate = reduce(free(), motion());
-      expect(indeterminate.type).toBe("indeterminate");
-      const next = reduce(indeterminate, { type: "release" });
-      expect(next.type).toBe("free");
-      expect(next.carousel.type).toBe("settled");
-    });
-
-    it("advances animations on tick", () => {
-      const reduce = makeReduce();
-      const state: CarouselPrivateState = {
-        type: "indeterminate",
-        carousel: makeSettledCarousel(),
-        items: {
-          a: makeInertiaItem(-50, 0, 2, -5),
-          b: makeSettledItem(),
-          c: makeSettledItem(),
-        },
-      };
-      const next = reduce(state, { type: "tick", timestamp: 16 });
-      expect(next.type).toBe("indeterminate");
-      expect(next.items.a.type).toBe("inertia");
-      expect(next.items.a.x.value).toBeLessThan(-50);
-    });
 
     it("transitions to carousel on carousel pan (no itemId)", () => {
       const reduce = makeReduce();
-      let state = reduce(free(), motion({ dx: -50 }));
-      state = reduce(state, motion({ dx: -50 }));
+      const state = reduce(free(), motion({ dx: -50 }));
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
       // First tracking update establishes origin; position unchanged
@@ -261,8 +213,7 @@ describe("createCarouselModel", () => {
 
     it("transitions to carousel when item at scale=1 is panned (carousel moves, item stays)", () => {
       const reduce = makeReduce();
-      let state = reduce(free(), motion({ itemId: "a", dx: -80 }));
-      state = reduce(state, motion({ itemId: "a", dx: -80 }));
+      const state = reduce(free(), motion({ itemId: "a", dx: -80 }));
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
       expect(state.carousel.x.value).toBeCloseTo(0);
@@ -288,8 +239,7 @@ describe("createCarouselModel", () => {
 
     it("transitions to items on pinch (dScale != 1), even when item is at scale=1", () => {
       const reduce = makeReduce();
-      let state = reduce(free(), motion({ itemId: "a" }));
-      state = reduce(state, motion({ itemId: "a", dScale: 1.5 }));
+      const state = reduce(free(), motion({ itemId: "a", dScale: 1.5 }));
       expect(state.type).toBe("items");
       if (state.type === "items") {
         expect(state.activeItemId).toBe("a");
@@ -446,8 +396,7 @@ describe("createCarouselModel", () => {
           c: makeSettledItem(),
         },
       };
-      let state = reduce(freeWithInertia, motion({ dx: -30 })); // → indeterminate
-      state = reduce(state, motion({ dx: -30 })); // → carousel, tracking
+      const state = reduce(freeWithInertia, motion({ dx: -30 })); // → carousel, tracking
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
       expect(state.items.a.type).toBe("inertia"); // item continues
@@ -806,9 +755,7 @@ describe("createCarouselModel", () => {
     it("transitions to carousel tracking on motion without itemId (interrupts snap)", () => {
       const reduce = makeReduce();
       let state: CarouselPrivateState = makeSnappingState();
-      state = reduce(state, motion({ dx: -20 })); // → indeterminate
-      expect(state.type).toBe("indeterminate");
-      state = reduce(state, motion({ dx: -20 })); // → carousel (snap interrupted)
+      state = reduce(state, motion({ dx: -20 })); // → carousel
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
     });
