@@ -373,6 +373,56 @@ describe("createCarouselModel", () => {
       }
     });
 
+    it("snap target is the next item when flicked even if less than halfway across", () => {
+      const reduce = makeReduce();
+      // x=-100, velocity=-2 px/ms → projected ≈ -100 - 199 = -299 → snaps to -400
+      const flickState: CarouselPrivateState = {
+        type: "carousel",
+        carousel: {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          x: { value: -100, velocity: -2, lastUpdatedAt: 0 },
+          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
+          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+        },
+        items: {
+          a: makeSettledItem(),
+          b: makeSettledItem(),
+          c: makeSettledItem(),
+        },
+      };
+      const state = reduce(flickState, { type: "release" });
+      expect(state.type).toBe("free");
+      if (state.carousel.type === "snapping") {
+        expect(state.carousel.target.x).toBe(-ITEM_WIDTH);
+      }
+    });
+
+    it("snap target returns to previous item when flicked back even if past halfway", () => {
+      const reduce = makeReduce();
+      // x=-300, velocity=+2 px/ms → projected ≈ -300 + 199 = -101 → snaps to 0
+      const flickBackState: CarouselPrivateState = {
+        type: "carousel",
+        carousel: {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          x: { value: -300, velocity: 2, lastUpdatedAt: 0 },
+          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
+          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+        },
+        items: {
+          a: makeSettledItem(),
+          b: makeSettledItem(),
+          c: makeSettledItem(),
+        },
+      };
+      const state = reduce(flickBackState, { type: "release" });
+      expect(state.type).toBe("free");
+      if (state.carousel.type === "snapping") {
+        expect(state.carousel.target.x).toBe(0);
+      }
+    });
+
     it("snap target is clamped to the last item boundary", () => {
       const reduce = makeReduce();
       let state = reduce(free(-800), motion());
