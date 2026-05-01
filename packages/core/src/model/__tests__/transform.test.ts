@@ -418,15 +418,13 @@ describe("createTransformReduce", () => {
     });
 
     it("zoom-in target is clamped to bounds", () => {
-      // itemWidth=400: bounds(2) = { minX: -400, maxX: 0 }
+      // elementWidth=400, toggleZoomScale=2
+      // At scale=2: minX = 400 - 400*2 = -400, maxX = 0
       // tap at originX=500: proposed targetX = 500*(1-2)+0*2 = -500, clamped to -400
       const reduce = createTransformReduce({
-        bounds: (scale) => ({
-          minX: 400 * (1 - scale),
-          maxX: 0,
-          minY: 600 * (1 - scale),
-          maxY: 0,
-        }),
+        elementWidth: 400,
+        elementHeight: 600,
+        bounds: { left: 0, right: 400, top: 0, bottom: 600 },
       });
       const state = reduce(
         { type: "settled", ...makeTransform() },
@@ -448,6 +446,90 @@ describe("createTransformReduce", () => {
         // targetX = 100*(1-3)+0*3 = -200
         expect(state.target.x).toBeCloseTo(-200);
       }
+    });
+  });
+
+  describe("bounds", () => {
+    function makeReduceWithBounds() {
+      return createTransformReduce({
+        elementWidth: 400,
+        elementHeight: 600,
+        bounds: { left: 0, right: 400, top: 0, bottom: 600 },
+      });
+    }
+
+    it("clamps position to right boundary (maxX = left = 0) during motion", () => {
+      // At scale=2: minX = 400-400*2 = -400, maxX = 0. Moving right past 0 is clamped.
+      const reduce = makeReduceWithBounds();
+      const state = reduce(
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          ...makeTransform(-50, 0, 2),
+        },
+        {
+          type: "motion",
+          timestamp: 16,
+          dx: 100,
+          dy: 0,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+        },
+      );
+      expect(state.x.value).toBeCloseTo(0);
+    });
+
+    it("clamps position to left boundary (minX = right - w*scale) during motion", () => {
+      // At scale=2: minX = 400-400*2 = -400. Moving left past -400 is clamped.
+      const reduce = makeReduceWithBounds();
+      const state = reduce(
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          ...makeTransform(-390, 0, 2),
+        },
+        {
+          type: "motion",
+          timestamp: 16,
+          dx: -50,
+          dy: 0,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+        },
+      );
+      expect(state.x.value).toBeCloseTo(-400);
+    });
+
+    it("prevents zooming below minScale (= right/elementWidth = 1) during motion", () => {
+      const reduce = makeReduceWithBounds();
+      const state = reduce(
+        { type: "tracking", origin: { x: 0, y: 0 }, ...makeTransform(0, 0, 1) },
+        {
+          type: "motion",
+          timestamp: 16,
+          dx: 0,
+          dy: 0,
+          dScale: 0.5,
+          originX: 0,
+          originY: 0,
+        },
+      );
+      expect(state.scale.value).toBeCloseTo(1);
+    });
+
+    it("clamps scale to minScale in inertia when logVelocity is negative", () => {
+      const reduce = makeReduceWithBounds();
+      const state: TransformPrivateState = {
+        type: "inertia",
+        origin: { x: 0, y: 0 },
+        x: { value: 0, velocity: 0, lastUpdatedAt: 0 },
+        y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
+        scale: { value: 1, logVelocity: -0.01, lastUpdatedAt: 0 },
+      };
+      const after = reduce(state, { type: "tick", timestamp: 16 });
+      expect(after.scale.value).toBeGreaterThanOrEqual(1);
     });
   });
 });

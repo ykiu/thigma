@@ -14,11 +14,19 @@ import {
 export type TransformSnapTarget = { x: number; y: number; scale: number };
 
 export type TransformConfig = {
-  bounds?: (scale: number) => {
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
+  elementWidth?: number;
+  elementHeight?: number;
+  /**
+   * Constrains the element so its edges stay within the given coordinates.
+   * - `left`/`top`: element's left/top edge must be ≤ this value (maxima)
+   * - `right`/`bottom`: element's right/bottom edge must be ≥ this value (minima)
+   * Also enforces a minimum scale so the element can always satisfy these constraints.
+   */
+  bounds?: {
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
   };
   snapTarget?: (state: {
     x: LinearPrimitive;
@@ -60,6 +68,35 @@ export type TransformPrivateState =
       scale: ExponentialPrimitive;
     };
 
+function computeMinScale(
+  bounds: NonNullable<TransformConfig["bounds"]>,
+  elementWidth: number,
+  elementHeight: number,
+): number {
+  let minScale = 0;
+  if (bounds.right != null && elementWidth > 0)
+    minScale = Math.max(minScale, bounds.right / elementWidth);
+  if (bounds.bottom != null && elementHeight > 0)
+    minScale = Math.max(minScale, bounds.bottom / elementHeight);
+  return minScale;
+}
+
+function computePositionBounds(
+  scale: number,
+  bounds: NonNullable<TransformConfig["bounds"]>,
+  elementWidth: number,
+  elementHeight: number,
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  return {
+    minX:
+      bounds.right != null ? bounds.right - elementWidth * scale : -Infinity,
+    maxX: bounds.left ?? Infinity,
+    minY:
+      bounds.bottom != null ? bounds.bottom - elementHeight * scale : -Infinity,
+    maxY: bounds.top ?? Infinity,
+  };
+}
+
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
@@ -79,7 +116,13 @@ export function settleTransform(state: {
 }
 
 export function createTransformReduce(config?: TransformConfig) {
-  const { bounds, snapTarget, toggleZoomScale = 2 } = config ?? {};
+  const {
+    bounds,
+    snapTarget,
+    toggleZoomScale = 2,
+    elementWidth = 0,
+    elementHeight = 0,
+  } = config ?? {};
 
   function computeToggleZoomTarget(
     state: {
@@ -95,7 +138,12 @@ export function createTransformReduce(config?: TransformConfig) {
       let targetX = originX * (1 - ds) + state.x.value * ds;
       let targetY = originY * (1 - ds) + state.y.value * ds;
       if (bounds) {
-        const b = bounds(toggleZoomScale);
+        const b = computePositionBounds(
+          toggleZoomScale,
+          bounds,
+          elementWidth,
+          elementHeight,
+        );
         targetX = Math.max(b.minX, Math.min(b.maxX, targetX));
         targetY = Math.max(b.minY, Math.min(b.maxY, targetY));
       }
@@ -120,15 +168,31 @@ export function createTransformReduce(config?: TransformConfig) {
             const { dx, dy, dScale, originX, originY, timestamp } = action;
             const tx = state.x.value;
             const ty = state.y.value;
-            const newScale = state.scale.value * dScale;
 
-            const proposedTx = originX + (tx - originX) * dScale + dx;
-            const proposedTy = originY + (ty - originY) * dScale + dy;
+            // Clamp dScale so scale cannot go below the minimum required by bounds.
+            let effectiveDScale = dScale;
+            if (bounds && state.scale.value > 0) {
+              const minScale = computeMinScale(
+                bounds,
+                elementWidth,
+                elementHeight,
+              );
+              effectiveDScale = Math.max(dScale, minScale / state.scale.value);
+            }
+            const newScale = state.scale.value * effectiveDScale;
+
+            const proposedTx = originX + (tx - originX) * effectiveDScale + dx;
+            const proposedTy = originY + (ty - originY) * effectiveDScale + dy;
 
             let clampedTx = proposedTx;
             let clampedTy = proposedTy;
             if (bounds) {
-              const b = bounds(newScale);
+              const b = computePositionBounds(
+                newScale,
+                bounds,
+                elementWidth,
+                elementHeight,
+              );
               clampedTx = Math.max(b.minX, Math.min(b.maxX, proposedTx));
               clampedTy = Math.max(b.minY, Math.min(b.maxY, proposedTy));
             }
@@ -136,8 +200,8 @@ export function createTransformReduce(config?: TransformConfig) {
             // Velocity tracks pan-only contribution so that advanceInertia can
             // handle the scale-pivot effect separately without double-counting.
             const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
-            const scalePivotTx = originX + (tx - originX) * dScale;
-            const scalePivotTy = originY + (ty - originY) * dScale;
+            const scalePivotTx = originX + (tx - originX) * effectiveDScale;
+            const scalePivotTy = originY + (ty - originY) * effectiveDScale;
 
             return {
               type: "tracking",
@@ -152,7 +216,11 @@ export function createTransformReduce(config?: TransformConfig) {
                 velocity: dtMs > 0 ? (clampedTy - scalePivotTy) / dtMs : 0,
                 lastUpdatedAt: timestamp,
               },
-              scale: applyExponentialFactor(state.scale, dScale, timestamp),
+              scale: applyExponentialFactor(
+                state.scale,
+                effectiveDScale,
+                timestamp,
+              ),
             };
           }
           case "release": {
@@ -225,26 +293,54 @@ export function createTransformReduce(config?: TransformConfig) {
             const newVx = state.x.velocity * retainedFactor;
             const newVy = state.y.velocity * retainedFactor;
 
-            return {
-              ...state,
-              x: {
-                value:
-                  state.origin.x +
-                  (state.x.value - state.origin.x) * ds +
-                  newVx * dtMs,
-                velocity: newVx,
-                lastUpdatedAt: timestamp,
-              },
-              y: {
-                value:
-                  state.origin.y +
-                  (state.y.value - state.origin.y) * ds +
-                  newVy * dtMs,
-                velocity: newVy,
-                lastUpdatedAt: timestamp,
-              },
-              scale: newScale,
+            let finalScale = newScale;
+            let newX = {
+              value:
+                state.origin.x +
+                (state.x.value - state.origin.x) * ds +
+                newVx * dtMs,
+              velocity: newVx,
+              lastUpdatedAt: timestamp,
             };
+            let newY = {
+              value:
+                state.origin.y +
+                (state.y.value - state.origin.y) * ds +
+                newVy * dtMs,
+              velocity: newVy,
+              lastUpdatedAt: timestamp,
+            };
+
+            if (bounds) {
+              const minScale = computeMinScale(
+                bounds,
+                elementWidth,
+                elementHeight,
+              );
+              if (newScale.value < minScale) {
+                finalScale = {
+                  value: minScale,
+                  logVelocity: 0,
+                  lastUpdatedAt: timestamp,
+                };
+                const b = computePositionBounds(
+                  minScale,
+                  bounds,
+                  elementWidth,
+                  elementHeight,
+                );
+                newX = {
+                  ...newX,
+                  value: Math.max(b.minX, Math.min(b.maxX, newX.value)),
+                };
+                newY = {
+                  ...newY,
+                  value: Math.max(b.minY, Math.min(b.maxY, newY.value)),
+                };
+              }
+            }
+
+            return { ...state, x: newX, y: newY, scale: finalScale };
           }
           case "toggle-zoom":
             return {

@@ -581,24 +581,13 @@ describe("createCarouselModel", () => {
       expect(state.items.a.type).toBe("inertia");
     });
 
-    it("item transitions to snapping on release when under-zoomed", () => {
+    it("bounds prevent item from zooming below scale=1", () => {
       const reduce = makeReduce();
-      const itemsUnderZoom: CarouselPrivateState = {
-        type: "items",
-        carousel: makeSettledCarousel(),
-        items: {
-          a: makeTrackingItem(0, 0, 0.5),
-          b: makeSettledItem(),
-          c: makeSettledItem(),
-        },
-        activeItemId: "a",
-      };
-      const state = reduce(itemsUnderZoom, { type: "release" });
-      expect(state.type).toBe("free");
-      expect(state.items.a.type).toBe("snapping");
-      if (state.items.a.type === "snapping") {
-        expect(state.items.a.target).toEqual({ x: 0, y: 0, scale: 1 });
-      }
+      const state = reduce(
+        makeItemsState({ x: 0, y: 0, scale: 1 }),
+        motion({ itemId: "a", dScale: 0.5, originX: 0, originY: 0 }),
+      );
+      expect(state.items.a.scale.value).toBeCloseTo(1);
     });
 
     it("advances carousel animations on tick", () => {

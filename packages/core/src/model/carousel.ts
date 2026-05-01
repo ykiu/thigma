@@ -69,40 +69,17 @@ type MotionEvent = Extract<InterpreterEvent, { type: "motion" }>;
 // Item bounds helper
 // ---------------------------------------------------------------------------
 
-/**
- * Returns the pan bounds for an item at the given scale.
- * When scale <= 1 the item fits within its container, so there is no room to pan.
- *
- * Derivation (transform-origin at top-left):
- *   content occupies [transformX, transformX + itemWidth * scale]
- *   to keep content filling the viewport:
- *     transformX <= 0
- *     transformX >= itemWidth * (1 - scale)
- */
-function getItemBounds(
-  scale: number,
-  itemWidth: number,
-  itemHeight: number,
-): { minX: number; maxX: number; minY: number; maxY: number } {
-  if (scale <= 1) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
-  return {
-    minX: itemWidth * (1 - scale),
-    maxX: 0,
-    minY: itemHeight * (1 - scale),
-    maxY: 0,
-  };
-}
-
 function isHorizontalOverscroll(
   item: TransformPrivateState,
   dx: number,
   itemWidth: number,
-  itemHeight: number,
 ): boolean {
-  const bounds = getItemBounds(item.scale.value, itemWidth, itemHeight);
+  // Item bounds (transform-origin at top-left, item must fill viewport):
+  //   maxX = 0 (left edge can't go right of 0)
+  //   minX = itemWidth * (1 - scale) (right edge must reach itemWidth)
   return (
-    (dx > 0 && item.x.value >= bounds.maxX) ||
-    (dx < 0 && item.x.value <= bounds.minX)
+    (dx > 0 && item.x.value >= 0) ||
+    (dx < 0 && item.x.value <= itemWidth * (1 - item.scale.value))
   );
 }
 
@@ -156,8 +133,9 @@ function createCarouselReduce(config: CarouselConfig) {
   const { itemWidth, itemHeight, itemIds } = config;
 
   const itemReduce = createTransformReduce({
-    bounds: (scale) => getItemBounds(scale, itemWidth, itemHeight),
-    snapTarget: (t) => (t.scale.value < 1 ? { x: 0, y: 0, scale: 1 } : null),
+    elementWidth: itemWidth,
+    elementHeight: itemHeight,
+    bounds: { left: 0, right: itemWidth, top: 0, bottom: itemHeight },
   });
 
   const carouselReduce = createTransformReduce({
@@ -252,12 +230,7 @@ function createCarouselReduce(config: CarouselConfig) {
                       isZoomed &&
                       !isInMotion &&
                       action.dScale === 1 &&
-                      isHorizontalOverscroll(
-                        item,
-                        action.dx,
-                        itemWidth,
-                        itemHeight,
-                      );
+                      isHorizontalOverscroll(item, action.dx, itemWidth);
                     if (!overscroll) {
                       // Lock to item
                       return {
