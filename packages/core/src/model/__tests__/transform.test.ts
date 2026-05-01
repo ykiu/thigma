@@ -238,38 +238,6 @@ describe("createTransformReduce", () => {
       );
       expect(state.type).toBe("settled");
     });
-
-    it("transitions to settled on release", () => {
-      const reduce = createTransformReduce();
-      const state = reduce(
-        {
-          type: "inertia",
-          origin: { x: 0, y: 0 },
-          ...makeTransformWithVelocity(),
-        },
-        { type: "release" },
-      );
-      expect(state.type).toBe("settled");
-    });
-
-    it("transitions to snapping on release with snap", () => {
-      const reduce = createTransformReduce({
-        snapTarget: (t) => ({
-          x: Math.round(t.x.value / 100) * 100,
-          y: t.y.value,
-          scale: t.scale.value,
-        }),
-      });
-      const state = reduce(
-        {
-          type: "inertia",
-          origin: { x: 0, y: 0 },
-          ...makeTransformWithVelocity(0, 0, 60),
-        },
-        { type: "release" },
-      );
-      expect(state.type).toBe("snapping");
-    });
   });
 
   describe("snapping state", () => {

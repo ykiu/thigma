@@ -260,20 +260,8 @@ export function createTransformReduce(config?: TransformConfig) {
               y: state.y,
               scale: state.scale,
             };
-          case "release": {
-            if (snapTarget) {
-              const target = snapTarget(state);
-              if (target)
-                return {
-                  type: "snapping",
-                  x: state.x,
-                  y: state.y,
-                  scale: state.scale,
-                  target,
-                };
-            }
-            return settleTransform(state);
-          }
+          case "release":
+            return state;
           case "tick": {
             const timestamp = action.timestamp;
             if (
