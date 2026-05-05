@@ -81,22 +81,6 @@ function computeMinScale(
   return minScale;
 }
 
-function computePositionBounds(
-  scale: number,
-  bounds: NonNullable<TransformConfig["bounds"]>,
-  elementWidth: number,
-  elementHeight: number,
-): { minX: number; maxX: number; minY: number; maxY: number } {
-  return {
-    minX:
-      bounds.right != null ? bounds.right - elementWidth * scale : -Infinity,
-    maxX: bounds.left ?? Infinity,
-    minY:
-      bounds.bottom != null ? bounds.bottom - elementHeight * scale : -Infinity,
-    maxY: bounds.top ?? Infinity,
-  };
-}
-
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
@@ -124,6 +108,20 @@ export function createTransformReduce(config?: TransformConfig) {
     elementHeight = 0,
   } = config ?? {};
 
+  function clampPosition(scale: number, x: number, y: number): { x: number; y: number } {
+    if (!bounds) return { x, y };
+    return {
+      x: Math.max(
+        bounds.right != null ? bounds.right - elementWidth * scale : -Infinity,
+        Math.min(bounds.left ?? Infinity, x),
+      ),
+      y: Math.max(
+        bounds.bottom != null ? bounds.bottom - elementHeight * scale : -Infinity,
+        Math.min(bounds.top ?? Infinity, y),
+      ),
+    };
+  }
+
   function computeToggleZoomTarget(
     state: {
       x: LinearPrimitive;
@@ -137,16 +135,7 @@ export function createTransformReduce(config?: TransformConfig) {
       const ds = toggleZoomScale / state.scale.value;
       let targetX = originX * (1 - ds) + state.x.value * ds;
       let targetY = originY * (1 - ds) + state.y.value * ds;
-      if (bounds) {
-        const b = computePositionBounds(
-          toggleZoomScale,
-          bounds,
-          elementWidth,
-          elementHeight,
-        );
-        targetX = Math.max(b.minX, Math.min(b.maxX, targetX));
-        targetY = Math.max(b.minY, Math.min(b.maxY, targetY));
-      }
+      ({ x: targetX, y: targetY } = clampPosition(toggleZoomScale, targetX, targetY));
       return { x: targetX, y: targetY, scale: toggleZoomScale };
     }
     return { x: 0, y: 0, scale: 1 };
@@ -184,18 +173,7 @@ export function createTransformReduce(config?: TransformConfig) {
             const proposedTx = originX + (tx - originX) * effectiveDScale + dx;
             const proposedTy = originY + (ty - originY) * effectiveDScale + dy;
 
-            let clampedTx = proposedTx;
-            let clampedTy = proposedTy;
-            if (bounds) {
-              const b = computePositionBounds(
-                newScale,
-                bounds,
-                elementWidth,
-                elementHeight,
-              );
-              clampedTx = Math.max(b.minX, Math.min(b.maxX, proposedTx));
-              clampedTy = Math.max(b.minY, Math.min(b.maxY, proposedTy));
-            }
+            const { x: clampedTx, y: clampedTy } = clampPosition(newScale, proposedTx, proposedTy);
 
             // Velocity tracks pan-only contribution so that advanceInertia can
             // handle the scale-pivot effect separately without double-counting.
@@ -311,20 +289,9 @@ export function createTransformReduce(config?: TransformConfig) {
                   logVelocity: 0,
                   lastUpdatedAt: timestamp,
                 };
-                const b = computePositionBounds(
-                  minScale,
-                  bounds,
-                  elementWidth,
-                  elementHeight,
-                );
-                newX = {
-                  ...newX,
-                  value: Math.max(b.minX, Math.min(b.maxX, newX.value)),
-                };
-                newY = {
-                  ...newY,
-                  value: Math.max(b.minY, Math.min(b.maxY, newY.value)),
-                };
+                const clamped = clampPosition(minScale, newX.value, newY.value);
+                newX = { ...newX, value: clamped.x };
+                newY = { ...newY, value: clamped.y };
               }
             }
 
