@@ -289,11 +289,11 @@ export function createTransformReduce(config?: TransformConfig) {
                   logVelocity: 0,
                   lastUpdatedAt: timestamp,
                 };
-                const clamped = clampPosition(minScale, newX.value, newY.value);
-                newX = { ...newX, value: clamped.x };
-                newY = { ...newY, value: clamped.y };
               }
             }
+            const clamped = clampPosition(finalScale.value, newX.value, newY.value);
+            newX = { ...newX, value: clamped.x };
+            newY = { ...newY, value: clamped.y };
 
             return { ...state, x: newX, y: newY, scale: finalScale };
           }
