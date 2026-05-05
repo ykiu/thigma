@@ -7,8 +7,6 @@ import {
   computeDtMs,
   applyExponentialFactor,
   advanceExponentialInertia,
-  advanceLinearSpring,
-  advanceExponentialSpring,
 } from "./primitives.js";
 
 export type TransformSnapTarget = { x: number; y: number; scale: number };
@@ -81,6 +79,7 @@ function computeMinScale(
   return minScale;
 }
 
+const SNAP_DECAY = 0.95; // per-frame interpolation factor toward snap target
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
@@ -108,7 +107,11 @@ export function createTransformReduce(config?: TransformConfig) {
     elementHeight = 0,
   } = config ?? {};
 
-  function clampPosition(scale: number, x: number, y: number): { x: number; y: number } {
+  function clampPosition(
+    scale: number,
+    x: number,
+    y: number,
+  ): { x: number; y: number } {
     if (!bounds) return { x, y };
     return {
       x: Math.max(
@@ -116,7 +119,9 @@ export function createTransformReduce(config?: TransformConfig) {
         Math.min(bounds.left ?? Infinity, x),
       ),
       y: Math.max(
-        bounds.bottom != null ? bounds.bottom - elementHeight * scale : -Infinity,
+        bounds.bottom != null
+          ? bounds.bottom - elementHeight * scale
+          : -Infinity,
         Math.min(bounds.top ?? Infinity, y),
       ),
     };
@@ -135,7 +140,11 @@ export function createTransformReduce(config?: TransformConfig) {
       const ds = toggleZoomScale / state.scale.value;
       let targetX = originX * (1 - ds) + state.x.value * ds;
       let targetY = originY * (1 - ds) + state.y.value * ds;
-      ({ x: targetX, y: targetY } = clampPosition(toggleZoomScale, targetX, targetY));
+      ({ x: targetX, y: targetY } = clampPosition(
+        toggleZoomScale,
+        targetX,
+        targetY,
+      ));
       return { x: targetX, y: targetY, scale: toggleZoomScale };
     }
     return { x: 0, y: 0, scale: 1 };
@@ -173,7 +182,11 @@ export function createTransformReduce(config?: TransformConfig) {
             const proposedTx = originX + (tx - originX) * effectiveDScale + dx;
             const proposedTy = originY + (ty - originY) * effectiveDScale + dy;
 
-            const { x: clampedTx, y: clampedTy } = clampPosition(newScale, proposedTx, proposedTy);
+            const { x: clampedTx, y: clampedTy } = clampPosition(
+              newScale,
+              proposedTx,
+              proposedTy,
+            );
 
             // Velocity tracks pan-only contribution so that advanceInertia can
             // handle the scale-pivot effect separately without double-counting.
@@ -291,24 +304,30 @@ export function createTransformReduce(config?: TransformConfig) {
                 };
               }
             }
-            const clamped = clampPosition(finalScale.value, newX.value, newY.value);
+            const clamped = clampPosition(
+              finalScale.value,
+              newX.value,
+              newY.value,
+            );
             newX = { ...newX, value: clamped.x };
             newY = { ...newY, value: clamped.y };
 
             return { ...state, x: newX, y: newY, scale: finalScale };
           }
-          case "toggle-zoom":
+          case "toggle-zoom": {
+            const target = computeToggleZoomTarget(
+              state,
+              action.originX,
+              action.originY,
+            );
             return {
               type: "snapping",
               x: state.x,
               y: state.y,
               scale: state.scale,
-              target: computeToggleZoomTarget(
-                state,
-                action.originX,
-                action.originY,
-              ),
+              target,
             };
+          }
         }
         throw new Error("unreachable");
       }
@@ -354,13 +373,27 @@ export function createTransformReduce(config?: TransformConfig) {
             }
             return {
               ...state,
-              x: advanceLinearSpring(state.x, state.target.x, action.timestamp),
-              y: advanceLinearSpring(state.y, state.target.y, action.timestamp),
-              scale: advanceExponentialSpring(
-                state.scale,
-                state.target.scale,
-                action.timestamp,
-              ),
+              x: {
+                value:
+                  state.target.x +
+                  (state.x.value - state.target.x) * SNAP_DECAY,
+                velocity: 0,
+                lastUpdatedAt: action.timestamp,
+              },
+              y: {
+                value:
+                  state.target.y +
+                  (state.y.value - state.target.y) * SNAP_DECAY,
+                velocity: 0,
+                lastUpdatedAt: action.timestamp,
+              },
+              scale: {
+                value:
+                  state.target.scale +
+                  (state.scale.value - state.target.scale) * SNAP_DECAY,
+                logVelocity: 0,
+                lastUpdatedAt: action.timestamp,
+              },
             };
           }
         }
@@ -384,18 +417,20 @@ export function createTransformReduce(config?: TransformConfig) {
             return state;
           case "tick":
             return state;
-          case "toggle-zoom":
+          case "toggle-zoom": {
+            const target = computeToggleZoomTarget(
+              state,
+              action.originX,
+              action.originY,
+            );
             return {
               type: "snapping",
               x: state.x,
               y: state.y,
               scale: state.scale,
-              target: computeToggleZoomTarget(
-                state,
-                action.originX,
-                action.originY,
-              ),
+              target,
             };
+          }
         }
         throw new Error("unreachable");
       }
