@@ -284,14 +284,29 @@ export function createTransformReduce(config?: TransformConfig) {
             // Advance inertia
             const oldScale = state.scale.value;
             const newScale = advanceExponentialInertia(state.scale, timestamp);
-            const ds = newScale.value / oldScale;
+
+            let finalScale = newScale;
+            if (bounds) {
+              const minScale = computeMinScale(
+                bounds,
+                elementWidth,
+                elementHeight,
+              );
+              if (newScale.value < minScale) {
+                finalScale = {
+                  value: minScale,
+                  logVelocity: 0,
+                  lastUpdatedAt: timestamp,
+                };
+              }
+            }
+            const ds = finalScale.value / oldScale;
 
             const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
             const retainedFactor = 0.99 ** dtMs;
             const newVx = state.x.velocity * retainedFactor;
             const newVy = state.y.velocity * retainedFactor;
 
-            let finalScale = newScale;
             const pivoted = applyScalePivot(
               state.x.value,
               state.y.value,
@@ -308,21 +323,6 @@ export function createTransformReduce(config?: TransformConfig) {
               velocity: newVy,
               lastUpdatedAt: timestamp,
             };
-
-            if (bounds) {
-              const minScale = computeMinScale(
-                bounds,
-                elementWidth,
-                elementHeight,
-              );
-              if (newScale.value < minScale) {
-                finalScale = {
-                  value: minScale,
-                  logVelocity: 0,
-                  lastUpdatedAt: timestamp,
-                };
-              }
-            }
             const clamped = clampPosition(
               finalScale.value,
               newX.value,
