@@ -9,9 +9,9 @@ export type { TransformPrivateState, TransformConfig };
 
 function toPublicState(state: TransformPrivateState): State {
   return {
-    transformX: state.x.value,
-    transformY: state.y.value,
-    scale: state.scale.value,
+    transformX: state.transform.x,
+    transformY: state.transform.y,
+    scale: state.transform.scale,
   };
 }
 

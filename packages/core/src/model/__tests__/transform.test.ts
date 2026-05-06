@@ -3,24 +3,21 @@ import {
   createTransformReduce,
   type TransformPrivateState,
 } from "../transform.js";
-import {
-  createLinearPrimitive,
-  createExponentialPrimitive,
-} from "../primitives.js";
 
+/** Common transform/timestamp fields shared across all state types. */
 function makeTransform(x = 0, y = 0, scale = 1) {
   return {
-    x: createLinearPrimitive(x),
-    y: createLinearPrimitive(y),
-    scale: createExponentialPrimitive(scale),
+    transform: { x, y, scale },
+    lastUpdatedAt: NaN,
   };
 }
 
+/** Common fields for tracking/inertia states that carry velocity. */
 function makeTransformWithVelocity(vx = 0, vy = 0, x = 0, y = 0) {
   return {
-    x: { value: x, velocity: vx, lastUpdatedAt: 0 },
-    y: { value: y, velocity: vy, lastUpdatedAt: 0 },
-    scale: createExponentialPrimitive(1),
+    transform: { x, y, scale: 1 },
+    velocity: { vx, vy, logVScale: 0 },
+    lastUpdatedAt: 0,
   };
 }
 
@@ -30,9 +27,9 @@ describe("createTransformReduce", () => {
       const reduce = createTransformReduce();
       const state = reduce(undefined, { type: "tick", timestamp: 0 });
       expect(state.type).toBe("settled");
-      expect(state.x.value).toBe(0);
-      expect(state.y.value).toBe(0);
-      expect(state.scale.value).toBe(1);
+      expect(state.transform.x).toBe(0);
+      expect(state.transform.y).toBe(0);
+      expect(state.transform.scale).toBe(1);
     });
   });
 
@@ -80,6 +77,7 @@ describe("createTransformReduce", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(),
         },
         {
@@ -101,6 +99,7 @@ describe("createTransformReduce", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(10, 20),
         },
         {
@@ -113,19 +112,20 @@ describe("createTransformReduce", () => {
           originY: 0,
         },
       );
-      expect(state.x.value).toBeCloseTo(15);
-      expect(state.y.value).toBeCloseTo(17);
+      expect(state.transform.x).toBeCloseTo(15);
+      expect(state.transform.y).toBeCloseTo(17);
     });
 
     it("adjusts translation for scale origin", () => {
       const reduce = createTransformReduce();
       // Zoom 2x at (100, 100) from (0, 0)
-      // newTx = 100 + (0 - 100) * 2 + 0 = -100
-      // newTy = 100 + (0 - 100) * 2 + 0 = -100
+      // newX = 100 + (0 - 100) * 2 + 0 = -100
+      // newY = 100 + (0 - 100) * 2 + 0 = -100
       const state = reduce(
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(),
         },
         {
@@ -138,9 +138,9 @@ describe("createTransformReduce", () => {
           originY: 100,
         },
       );
-      expect(state.x.value).toBeCloseTo(-100);
-      expect(state.y.value).toBeCloseTo(-100);
-      expect(state.scale.value).toBeCloseTo(2);
+      expect(state.transform.x).toBeCloseTo(-100);
+      expect(state.transform.y).toBeCloseTo(-100);
+      expect(state.transform.scale).toBeCloseTo(2);
     });
 
     it("transitions to inertia on release", () => {
@@ -158,16 +158,17 @@ describe("createTransformReduce", () => {
 
     it("transitions to snapping on release with snap", () => {
       const reduce = createTransformReduce({
-        snapTarget: (t) => ({
-          x: Math.round(t.x.value / 100) * 100,
-          y: t.y.value,
-          scale: t.scale.value,
+        snapTarget: ({ transform }) => ({
+          x: Math.round(transform.x / 100) * 100,
+          y: transform.y,
+          scale: transform.scale,
         }),
       });
       const state = reduce(
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(60),
         },
         { type: "release" },
@@ -184,6 +185,7 @@ describe("createTransformReduce", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(),
         },
         { type: "tick", timestamp: 16 },
@@ -223,7 +225,7 @@ describe("createTransformReduce", () => {
       };
       const after = reduce(before, { type: "tick", timestamp: 16 });
       expect(after.type).toBe("inertia");
-      expect(after.x.value).toBeGreaterThan(0);
+      expect(after.transform.x).toBeGreaterThan(0);
     });
 
     it("transitions to settled on tick when velocity is negligible", () => {
@@ -279,8 +281,8 @@ describe("createTransformReduce", () => {
         timestamp: 16,
       });
       expect(after.type).toBe("snapping");
-      expect(after.x.value).toBeGreaterThan(60);
-      expect(after.x.value).toBeLessThan(100);
+      expect(after.transform.x).toBeGreaterThan(60);
+      expect(after.transform.x).toBeLessThan(100);
     });
 
     it("transitions to settled when within snap threshold", () => {
@@ -290,7 +292,7 @@ describe("createTransformReduce", () => {
         timestamp: 16,
       });
       expect(after.type).toBe("settled");
-      expect(after.x.value).toBeCloseTo(100, 0);
+      expect(after.transform.x).toBeCloseTo(100, 0);
     });
 
     it("converges to snap target over many frames", () => {
@@ -301,7 +303,7 @@ describe("createTransformReduce", () => {
         if (state.type === "settled") break;
       }
       expect(state.type).toBe("settled");
-      expect(state.x.value).toBeCloseTo(100, 0);
+      expect(state.transform.x).toBeCloseTo(100, 0);
     });
   });
 
@@ -370,6 +372,7 @@ describe("createTransformReduce", () => {
       const before: TransformPrivateState = {
         type: "tracking",
         origin: { x: 0, y: 0 },
+        velocity: { vx: 0, vy: 0, logVScale: 0 },
         ...makeTransform(),
       };
       expect(reduce(before, toggleZoom())).toBe(before);
@@ -433,6 +436,7 @@ describe("createTransformReduce", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(-50, 0, 2),
         },
         {
@@ -445,7 +449,7 @@ describe("createTransformReduce", () => {
           originY: 0,
         },
       );
-      expect(state.x.value).toBeCloseTo(0);
+      expect(state.transform.x).toBeCloseTo(0);
     });
 
     it("clamps position to left boundary (minX = right - w*scale) during motion", () => {
@@ -455,6 +459,7 @@ describe("createTransformReduce", () => {
         {
           type: "tracking",
           origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
           ...makeTransform(-390, 0, 2),
         },
         {
@@ -467,13 +472,18 @@ describe("createTransformReduce", () => {
           originY: 0,
         },
       );
-      expect(state.x.value).toBeCloseTo(-400);
+      expect(state.transform.x).toBeCloseTo(-400);
     });
 
     it("prevents zooming below minScale (= right/elementWidth = 1) during motion", () => {
       const reduce = makeReduceWithBounds();
       const state = reduce(
-        { type: "tracking", origin: { x: 0, y: 0 }, ...makeTransform(0, 0, 1) },
+        {
+          type: "tracking",
+          origin: { x: 0, y: 0 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
+          ...makeTransform(0, 0, 1),
+        },
         {
           type: "motion",
           timestamp: 16,
@@ -484,20 +494,20 @@ describe("createTransformReduce", () => {
           originY: 0,
         },
       );
-      expect(state.scale.value).toBeCloseTo(1);
+      expect(state.transform.scale).toBeCloseTo(1);
     });
 
-    it("clamps scale to minScale in inertia when logVelocity is negative", () => {
+    it("clamps scale to minScale in inertia when logVScale is negative", () => {
       const reduce = makeReduceWithBounds();
       const state: TransformPrivateState = {
         type: "inertia",
         origin: { x: 0, y: 0 },
-        x: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-        y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-        scale: { value: 1, logVelocity: -0.01, lastUpdatedAt: 0 },
+        transform: { x: 0, y: 0, scale: 1 },
+        velocity: { vx: 0, vy: 0, logVScale: -0.01 },
+        lastUpdatedAt: 0,
       };
       const after = reduce(state, { type: "tick", timestamp: 16 });
-      expect(after.scale.value).toBeGreaterThanOrEqual(1);
+      expect(after.transform.scale).toBeGreaterThanOrEqual(1);
     });
   });
 });

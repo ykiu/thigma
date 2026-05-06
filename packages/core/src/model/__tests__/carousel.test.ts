@@ -16,34 +16,34 @@ function makeReduce() {
   return createCarouselModel(DEFAULT_CONFIG).reduce;
 }
 
-function makeItemTransform(
-  x = 0,
-  y = 0,
-  scale = 1,
-  velocity = 0,
-  logVelocity = 0,
-) {
+/** Common transform/timestamp fields without velocity (settled/snapping). */
+function makeItemCore(x = 0, y = 0, scale = 1, lastUpdatedAt = 0) {
+  return { transform: { x, y, scale }, lastUpdatedAt };
+}
+
+/** Fields for tracking/inertia states that carry velocity. */
+function makeItemWithVelocity(x = 0, y = 0, scale = 1, vx = 0, logVScale = 0) {
   return {
-    x: { value: x, velocity, lastUpdatedAt: 0 },
-    y: { value: y, velocity, lastUpdatedAt: 0 },
-    scale: { value: scale, logVelocity, lastUpdatedAt: 0 },
+    transform: { x, y, scale },
+    velocity: { vx, vy: 0, logVScale },
+    lastUpdatedAt: 0,
   };
 }
 
 function makeSettledItem(x = 0, y = 0, scale = 1): TransformPrivateState {
-  return { type: "settled", ...makeItemTransform(x, y, scale) };
+  return { type: "settled", ...makeItemCore(x, y, scale, NaN) };
 }
 
 function makeInertiaItem(
   x = 0,
   y = 0,
   scale = 1,
-  velocity = 0,
+  vx = 0,
 ): TransformPrivateState {
   return {
     type: "inertia",
     origin: { x: 0, y: 0 },
-    ...makeItemTransform(x, y, scale, velocity),
+    ...makeItemWithVelocity(x, y, scale, vx),
   };
 }
 
@@ -51,16 +51,15 @@ function makeTrackingItem(x = 0, y = 0, scale = 1): TransformPrivateState {
   return {
     type: "tracking",
     origin: { x: 0, y: 0 },
-    ...makeItemTransform(x, y, scale),
+    ...makeItemWithVelocity(x, y, scale),
   };
 }
 
 function makeSettledCarousel(x = 0): TransformPrivateState {
   return {
     type: "settled",
-    x: { value: x, velocity: 0, lastUpdatedAt: NaN },
-    y: { value: 0, velocity: 0, lastUpdatedAt: NaN },
-    scale: { value: 1, logVelocity: 0, lastUpdatedAt: NaN },
+    transform: { x, y: 0, scale: 1 },
+    lastUpdatedAt: NaN,
   };
 }
 
@@ -74,12 +73,7 @@ function free(
   const items: Record<string, TransformPrivateState> = {};
   for (const id of ITEM_IDS) {
     const { x = 0, y = 0, scale = 1 } = itemOverrides[id] ?? {};
-    items[id] = {
-      type: "settled",
-      x: { value: x, velocity: 0, lastUpdatedAt: NaN },
-      y: { value: y, velocity: 0, lastUpdatedAt: NaN },
-      scale: { value: scale, logVelocity: 0, lastUpdatedAt: NaN },
-    };
+    items[id] = makeSettledItem(x, y, scale);
   }
   return { type: "free", carousel: makeSettledCarousel(carouselX), items };
 }
@@ -91,9 +85,9 @@ function makeCarouselTrackingState(carouselX = 0): CarouselPrivateState {
     carousel: {
       type: "tracking",
       origin: { x: carouselX, y: 0 },
-      x: { value: carouselX, velocity: 0, lastUpdatedAt: 0 },
-      y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-      scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+      transform: { x: carouselX, y: 0, scale: 1 },
+      velocity: { vx: 0, vy: 0, logVScale: 0 },
+      lastUpdatedAt: 0,
     },
     items: {
       a: makeSettledItem(),
@@ -157,12 +151,12 @@ describe("createCarouselModel", () => {
       const state = reduce(undefined, { type: "tick", timestamp: 0 });
       expect(state.type).toBe("free");
       expect(state.carousel.type).toBe("settled");
-      expect(state.carousel.x.value).toBe(0);
+      expect(state.carousel.transform.x).toBe(0);
       for (const id of ITEM_IDS) {
         expect(state.items[id].type).toBe("settled");
-        expect(state.items[id].x.value).toBe(0);
-        expect(state.items[id].y.value).toBe(0);
-        expect(state.items[id].scale.value).toBe(1);
+        expect(state.items[id].transform.x).toBe(0);
+        expect(state.items[id].transform.y).toBe(0);
+        expect(state.items[id].transform.scale).toBe(1);
       }
     });
   });
@@ -199,7 +193,7 @@ describe("createCarouselModel", () => {
       const next = reduce(state, { type: "tick", timestamp: 16 });
       expect(next.type).toBe("free");
       expect(next.items.a.type).toBe("inertia");
-      expect(next.items.a.x.value).toBeLessThan(-50);
+      expect(next.items.a.transform.x).toBeLessThan(-50);
     });
 
     it("transitions to carousel on carousel pan (no itemId)", () => {
@@ -207,7 +201,7 @@ describe("createCarouselModel", () => {
       const state = reduce(free(), motion({ dx: -50 }));
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
-      expect(state.carousel.x.value).toBeCloseTo(-50);
+      expect(state.carousel.transform.x).toBeCloseTo(-50);
     });
 
     it("transitions to carousel when item at scale=1 is panned (carousel moves, item stays)", () => {
@@ -215,8 +209,8 @@ describe("createCarouselModel", () => {
       const state = reduce(free(), motion({ itemId: "a", dx: -80 }));
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
-      expect(state.carousel.x.value).toBeCloseTo(-80);
-      expect(state.items.a.x.value).toBe(0);
+      expect(state.carousel.transform.x).toBeCloseTo(-80);
+      expect(state.items.a.transform.x).toBe(0);
     });
 
     it("transitions to carousel when zoomed item overscrolls right (at right edge, dx > 0)", () => {
@@ -228,7 +222,7 @@ describe("createCarouselModel", () => {
       );
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
-      expect(state.carousel.x.value).toBeCloseTo(50);
+      expect(state.carousel.transform.x).toBeCloseTo(50);
     });
 
     it("transitions to carousel when zoomed item overscrolls left (at left edge, dx < 0)", () => {
@@ -240,7 +234,7 @@ describe("createCarouselModel", () => {
       );
       expect(state.type).toBe("carousel");
       expect(state.carousel.type).toBe("tracking");
-      expect(state.carousel.x.value).toBeCloseTo(-50);
+      expect(state.carousel.transform.x).toBeCloseTo(-50);
     });
 
     it("does not transition to carousel when zoomed item is panned within bounds", () => {
@@ -264,9 +258,9 @@ describe("createCarouselModel", () => {
       if (state.type === "items") {
         expect(state.activeItemId).toBe("a");
         expect(state.items.a.type).toBe("tracking");
-        expect(state.items.a.x.value).toBeCloseTo(-50);
-        expect(state.items.a.y.value).toBeCloseTo(-50);
-        expect(state.items.b.x.value).toBe(0);
+        expect(state.items.a.transform.x).toBeCloseTo(-50);
+        expect(state.items.a.transform.y).toBeCloseTo(-50);
+        expect(state.items.b.transform.x).toBe(0);
       }
     });
 
@@ -381,9 +375,9 @@ describe("createCarouselModel", () => {
         carousel: {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          x: { value: -100, velocity: -2, lastUpdatedAt: 0 },
-          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+          transform: { x: -100, y: 0, scale: 1 },
+          velocity: { vx: -2, vy: 0, logVScale: 0 },
+          lastUpdatedAt: 0,
         },
         items: {
           a: makeSettledItem(),
@@ -406,9 +400,9 @@ describe("createCarouselModel", () => {
         carousel: {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          x: { value: -300, velocity: 2, lastUpdatedAt: 0 },
-          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+          transform: { x: -300, y: 0, scale: 1 },
+          velocity: { vx: 2, vy: 0, logVScale: 0 },
+          lastUpdatedAt: 0,
         },
         items: {
           a: makeSettledItem(),
@@ -451,9 +445,9 @@ describe("createCarouselModel", () => {
         carousel: {
           type: "tracking",
           origin: { x: 0, y: 0 },
-          x: { value: -50, velocity: 0, lastUpdatedAt: 0 },
-          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+          transform: { x: -50, y: 0, scale: 1 },
+          velocity: { vx: 0, vy: 0, logVScale: 0 },
+          lastUpdatedAt: 0,
         },
         items: {
           a: makeInertiaItem(-50, 0, 2, -5),
@@ -465,7 +459,7 @@ describe("createCarouselModel", () => {
       expect(next.type).toBe("carousel");
       expect(next.carousel.type).toBe("tracking");
       expect(next.items.a.type).toBe("inertia");
-      expect(next.items.a.x.value).toBeLessThan(-50);
+      expect(next.items.a.transform.x).toBeLessThan(-50);
     });
 
     it("can start scrolling the carousel while item is still in inertia", () => {
@@ -505,15 +499,15 @@ describe("createCarouselModel", () => {
       );
       expect(state.type).toBe("items");
       expect(state.items.a.type).toBe("tracking");
-      expect(state.items.a.x.value).toBeCloseTo(-40);
-      expect(state.items.a.y.value).toBeCloseTo(-45);
+      expect(state.items.a.transform.x).toBeCloseTo(-40);
+      expect(state.items.a.transform.y).toBeCloseTo(-45);
     });
 
     it("does not move non-tracking items", () => {
       const reduce = makeReduce();
       const state = reduce(makeItemsState(), motion({ itemId: "a", dx: 10 }));
-      expect(state.items.b.x.value).toBe(0);
-      expect(state.items.c.x.value).toBe(0);
+      expect(state.items.b.transform.x).toBe(0);
+      expect(state.items.c.transform.x).toBe(0);
     });
 
     it("ignores motion targeting a different item (returns same reference)", () => {
@@ -533,23 +527,23 @@ describe("createCarouselModel", () => {
     it("does not move the carousel during item pan", () => {
       const reduce = makeReduce();
       const state = reduce(makeItemsState(), motion({ itemId: "a", dx: 30 }));
-      expect(state.carousel.x.value).toBe(0);
+      expect(state.carousel.transform.x).toBe(0);
     });
 
     it("discards overflow when item is panned beyond its right bound", () => {
       const reduce = makeReduce();
       const before = makeItemsState({ x: 0, y: 0, scale: 2 });
       const after = reduce(before, motion({ itemId: "a", dx: 50 }));
-      expect(after.items.a.x.value).toBeCloseTo(0);
-      expect(after.carousel.x.value).toBeCloseTo(0);
+      expect(after.items.a.transform.x).toBeCloseTo(0);
+      expect(after.carousel.transform.x).toBeCloseTo(0);
     });
 
     it("discards overflow when item is panned beyond its left bound", () => {
       const reduce = makeReduce();
       const before = makeItemsState({ x: -400, y: 0, scale: 2 });
       const after = reduce(before, motion({ itemId: "a", dx: -50 }));
-      expect(after.items.a.x.value).toBeCloseTo(-400);
-      expect(after.carousel.x.value).toBeCloseTo(0);
+      expect(after.items.a.transform.x).toBeCloseTo(-400);
+      expect(after.carousel.transform.x).toBeCloseTo(0);
     });
 
     it("transitions to free on release, item transitions to inertia", () => {
@@ -569,7 +563,7 @@ describe("createCarouselModel", () => {
           a: {
             type: "tracking",
             origin: { x: 0, y: 0 },
-            ...makeItemTransform(-50, 0, 2, -5),
+            ...makeItemWithVelocity(-50, 0, 2, -5),
           },
           b: makeSettledItem(),
           c: makeSettledItem(),
@@ -587,7 +581,7 @@ describe("createCarouselModel", () => {
         makeItemsState({ x: 0, y: 0, scale: 1 }),
         motion({ itemId: "a", dScale: 0.5, originX: 0, originY: 0 }),
       );
-      expect(state.items.a.scale.value).toBeCloseTo(1);
+      expect(state.items.a.transform.scale).toBeCloseTo(1);
     });
 
     it("advances carousel animations on tick", () => {
@@ -596,9 +590,8 @@ describe("createCarouselModel", () => {
         type: "items",
         carousel: {
           type: "snapping",
-          x: { value: -200, velocity: 0, lastUpdatedAt: 0 },
-          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+          transform: { x: -200, y: 0, scale: 1 },
+          lastUpdatedAt: 0,
           target: { x: -400, y: 0, scale: 1 },
         },
         items: {
@@ -611,7 +604,7 @@ describe("createCarouselModel", () => {
       const next = reduce(state, { type: "tick", timestamp: 16 });
       expect(next.type).toBe("items");
       expect(next.carousel.type).toBe("snapping");
-      expect(next.carousel.x.value).toBeLessThan(-200);
+      expect(next.carousel.transform.x).toBeLessThan(-200);
     });
   });
 
@@ -640,7 +633,7 @@ describe("createCarouselModel", () => {
       });
       expect(after.type).toBe("free");
       expect(after.items.a.type).toBe("inertia");
-      expect(after.items.a.x.value).toBeLessThan(-50);
+      expect(after.items.a.transform.x).toBeLessThan(-50);
     });
 
     it("does not move the carousel during item inertia", () => {
@@ -649,7 +642,7 @@ describe("createCarouselModel", () => {
         type: "tick",
         timestamp: 16,
       });
-      expect(after.carousel.x.value).toBe(0);
+      expect(after.carousel.transform.x).toBe(0);
     });
 
     it("does not move non-inertia items", () => {
@@ -658,7 +651,7 @@ describe("createCarouselModel", () => {
         type: "tick",
         timestamp: 16,
       });
-      expect(after.items.b.x.value).toBe(0);
+      expect(after.items.b.transform.x).toBe(0);
     });
 
     it("item settles when velocity decays", () => {
@@ -674,7 +667,7 @@ describe("createCarouselModel", () => {
       };
       const next = reduce(state, { type: "tick", timestamp: 16 });
       expect(next.items.a.type).toBe("settled");
-      expect(next.items.a.x.value).toBeCloseTo(-50);
+      expect(next.items.a.transform.x).toBeCloseTo(-50);
     });
 
     it("item stays at its current position after settling (no snap to neutral)", () => {
@@ -689,9 +682,9 @@ describe("createCarouselModel", () => {
         },
       };
       const next = reduce(state, { type: "tick", timestamp: 16 });
-      expect(next.items.a.x.value).toBeCloseTo(-50);
-      expect(next.items.a.y.value).toBeCloseTo(-30);
-      expect(next.items.a.scale.value).toBeCloseTo(2);
+      expect(next.items.a.transform.x).toBeCloseTo(-50);
+      expect(next.items.a.transform.y).toBeCloseTo(-30);
+      expect(next.items.a.transform.scale).toBeCloseTo(2);
     });
   });
 
@@ -707,7 +700,8 @@ describe("createCarouselModel", () => {
         items: {
           a: {
             type: "snapping",
-            ...makeItemTransform(0, 0, 0.5),
+            transform: { x: 0, y: 0, scale: 0.5 },
+            lastUpdatedAt: 0,
             target: { x: 0, y: 0, scale: 1 },
           },
           b: makeSettledItem(),
@@ -723,8 +717,8 @@ describe("createCarouselModel", () => {
         timestamp: 16,
       });
       expect(after.items.a.type).toBe("snapping");
-      expect(after.items.a.scale.value).toBeGreaterThan(0.5);
-      expect(after.items.a.scale.value).toBeLessThan(1);
+      expect(after.items.a.transform.scale).toBeGreaterThan(0.5);
+      expect(after.items.a.transform.scale).toBeLessThan(1);
     });
 
     it("settles item when scale reaches target", () => {
@@ -735,7 +729,7 @@ describe("createCarouselModel", () => {
         if (state.items.a.type === "settled") break;
       }
       expect(state.items.a.type).toBe("settled");
-      expect(state.items.a.scale.value).toBeCloseTo(1, 2);
+      expect(state.items.a.transform.scale).toBeCloseTo(1, 2);
     });
   });
 
@@ -752,9 +746,8 @@ describe("createCarouselModel", () => {
         type: "free",
         carousel: {
           type: "snapping",
-          x: { value: carouselX, velocity: 0, lastUpdatedAt: 0 },
-          y: { value: 0, velocity: 0, lastUpdatedAt: 0 },
-          scale: { value: 1, logVelocity: 0, lastUpdatedAt: 0 },
+          transform: { x: carouselX, y: 0, scale: 1 },
+          lastUpdatedAt: 0,
           target: { x: carouselTarget, y: 0, scale: 1 },
         },
         items: {
@@ -773,8 +766,8 @@ describe("createCarouselModel", () => {
       });
       expect(after.type).toBe("free");
       expect(after.carousel.type).toBe("snapping");
-      expect(after.carousel.x.value).toBeLessThan(-200);
-      expect(after.carousel.x.value).toBeGreaterThan(-400);
+      expect(after.carousel.transform.x).toBeLessThan(-200);
+      expect(after.carousel.transform.x).toBeGreaterThan(-400);
     });
 
     it("items do not spring during carousel snapping (stay at current position)", () => {
@@ -783,8 +776,8 @@ describe("createCarouselModel", () => {
         type: "tick",
         timestamp: 16,
       });
-      expect(after.items.a.scale.value).toBe(1.5);
-      expect(after.items.a.x.value).toBe(-50);
+      expect(after.items.a.transform.scale).toBe(1.5);
+      expect(after.items.a.transform.x).toBe(-50);
     });
 
     it("transitions to free/settled when carousel is within snap threshold", () => {
@@ -793,7 +786,7 @@ describe("createCarouselModel", () => {
       const after = reduce(state, { type: "tick", timestamp: 16 });
       expect(after.type).toBe("free");
       expect(after.carousel.type).toBe("settled");
-      expect(after.carousel.x.value).toBeCloseTo(-400);
+      expect(after.carousel.transform.x).toBeCloseTo(-400);
     });
 
     it("items stay at their current positions on settling", () => {
@@ -802,8 +795,8 @@ describe("createCarouselModel", () => {
       const after = reduce(state, { type: "tick", timestamp: 16 });
       expect(after.type).toBe("free");
       expect(after.carousel.type).toBe("settled");
-      expect(after.items.a.scale.value).toBe(1.5);
-      expect(after.items.a.x.value).toBe(-50);
+      expect(after.items.a.transform.scale).toBe(1.5);
+      expect(after.items.a.transform.x).toBe(-50);
     });
 
     it("converges carousel to snap target over many frames", () => {
@@ -815,7 +808,7 @@ describe("createCarouselModel", () => {
       }
       expect(state.type).toBe("free");
       expect(state.carousel.type).toBe("settled");
-      expect(state.carousel.x.value).toBeCloseTo(-400, 0);
+      expect(state.carousel.transform.x).toBeCloseTo(-400, 0);
     });
 
     it("stays snapping on release (returns same reference)", () => {

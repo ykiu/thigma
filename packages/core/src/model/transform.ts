@@ -1,12 +1,9 @@
 import type { StoreAction } from "../types.js";
 import {
-  type LinearPrimitive,
-  type ExponentialPrimitive,
-  createLinearPrimitive,
-  createExponentialPrimitive,
+  type Transform,
+  type TransformVelocity,
   computeDtMs,
-  applyExponentialFactor,
-  advanceExponentialInertia,
+  applyScalePivot,
 } from "./primitives.js";
 
 export type TransformSnapTarget = { x: number; y: number; scale: number };
@@ -27,9 +24,8 @@ export type TransformConfig = {
     bottom?: number;
   };
   snapTarget?: (state: {
-    x: LinearPrimitive;
-    y: LinearPrimitive;
-    scale: ExponentialPrimitive;
+    transform: Transform;
+    velocity: TransformVelocity;
   }) => TransformSnapTarget | null;
   /** Scale factor to apply when zooming in via double-tap. Defaults to 2. */
   toggleZoomScale?: number;
@@ -40,30 +36,28 @@ type Origin = { x: number; y: number };
 export type TransformPrivateState =
   | {
       type: "tracking";
-      x: LinearPrimitive;
-      y: LinearPrimitive;
-      scale: ExponentialPrimitive;
+      transform: Transform;
+      velocity: TransformVelocity;
+      lastUpdatedAt: number;
       origin: Origin;
     }
   | {
       type: "inertia";
-      x: LinearPrimitive;
-      y: LinearPrimitive;
-      scale: ExponentialPrimitive;
+      transform: Transform;
+      velocity: TransformVelocity;
+      lastUpdatedAt: number;
       origin: Origin;
     }
   | {
       type: "snapping";
-      x: LinearPrimitive;
-      y: LinearPrimitive;
-      scale: ExponentialPrimitive;
+      transform: Transform;
+      lastUpdatedAt: number;
       target: TransformSnapTarget;
     }
   | {
       type: "settled";
-      x: LinearPrimitive;
-      y: LinearPrimitive;
-      scale: ExponentialPrimitive;
+      transform: Transform;
+      lastUpdatedAt: number;
     };
 
 function computeMinScale(
@@ -79,34 +73,22 @@ function computeMinScale(
   return minScale;
 }
 
-function applyScalePivot(
-  x: number,
-  y: number,
-  origin: { x: number; y: number },
-  ds: number,
-): { x: number; y: number } {
-  return {
-    x: origin.x + (x - origin.x) * ds,
-    y: origin.y + (y - origin.y) * ds,
-  };
-}
-
 const SNAP_DECAY = 0.95; // per-frame interpolation factor toward snap target
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
 const LOG_VELOCITY_THRESHOLD = 0.0001; // log-units/ms
+const TRANSLATE_INERTIA_DECAY = 0.99; // fraction of velocity retained per ms
+const SCALE_LOG_INERTIA_DECAY = 0.98; // fraction of log-velocity retained per ms
 
 export function settleTransform(state: {
-  x: LinearPrimitive;
-  y: LinearPrimitive;
-  scale: ExponentialPrimitive;
+  transform: Transform;
+  lastUpdatedAt: number;
 }): Extract<TransformPrivateState, { type: "settled" }> {
   return {
     type: "settled",
-    x: { ...state.x, velocity: 0 },
-    y: { ...state.y, velocity: 0 },
-    scale: { ...state.scale, logVelocity: 0 },
+    transform: state.transform,
+    lastUpdatedAt: state.lastUpdatedAt,
   };
 }
 
@@ -140,21 +122,17 @@ export function createTransformReduce(config?: TransformConfig) {
   }
 
   function computeToggleZoomTarget(
-    state: {
-      x: LinearPrimitive;
-      y: LinearPrimitive;
-      scale: ExponentialPrimitive;
-    },
+    state: { transform: Transform },
     originX: number,
     originY: number,
   ): TransformSnapTarget {
-    if (Math.abs(state.scale.value - 1) < 0.01) {
-      const ds = toggleZoomScale / state.scale.value;
+    if (Math.abs(state.transform.scale - 1) < 0.01) {
+      const ds = toggleZoomScale / state.transform.scale;
       let { x: targetX, y: targetY } = applyScalePivot(
-        state.x.value,
-        state.y.value,
-        { x: originX, y: originY },
+        state.transform,
         ds,
+        originX,
+        originY,
       );
       ({ x: targetX, y: targetY } = clampPosition(
         toggleZoomScale,
@@ -169,9 +147,8 @@ export function createTransformReduce(config?: TransformConfig) {
   return function reduce(
     state: TransformPrivateState | undefined = {
       type: "settled",
-      x: createLinearPrimitive(0),
-      y: createLinearPrimitive(0),
-      scale: createExponentialPrimitive(1),
+      transform: { x: 0, y: 0, scale: 1 },
+      lastUpdatedAt: NaN,
     },
     action: StoreAction,
   ): TransformPrivateState {
@@ -180,76 +157,71 @@ export function createTransformReduce(config?: TransformConfig) {
         switch (action.type) {
           case "motion": {
             const { dx, dy, dScale, originX, originY, timestamp } = action;
-            const tx = state.x.value;
-            const ty = state.y.value;
 
             // Clamp dScale so scale cannot go below the minimum required by bounds.
             let effectiveDScale = dScale;
-            if (bounds && state.scale.value > 0) {
+            if (bounds) {
               const minScale = computeMinScale(
                 bounds,
                 elementWidth,
                 elementHeight,
               );
-              effectiveDScale = Math.max(dScale, minScale / state.scale.value);
+              effectiveDScale = Math.max(
+                dScale,
+                minScale / state.transform.scale,
+              );
             }
-            const newScale = state.scale.value * effectiveDScale;
+            const newScale = state.transform.scale * effectiveDScale;
 
-            // Velocity tracks pan-only contribution so that advanceInertia can
+            // Velocity tracks pan-only contribution so that the inertia tick can
             // handle the scale-pivot effect separately without double-counting.
-            const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
+            const dtMs = computeDtMs(state.lastUpdatedAt, timestamp);
             const pivoted = applyScalePivot(
-              tx,
-              ty,
-              { x: originX, y: originY },
+              state.transform,
               effectiveDScale,
+              originX,
+              originY,
             );
-            const proposedTx = pivoted.x + dx;
-            const proposedTy = pivoted.y + dy;
+            const proposedX = pivoted.x + dx;
+            const proposedY = pivoted.y + dy;
 
-            const { x: clampedTx, y: clampedTy } = clampPosition(
+            const { x: clampedX, y: clampedY } = clampPosition(
               newScale,
-              proposedTx,
-              proposedTy,
+              proposedX,
+              proposedY,
             );
 
             return {
               type: "tracking",
               origin: { x: originX, y: originY },
-              x: {
-                value: clampedTx,
-                velocity: dtMs > 0 ? (clampedTx - pivoted.x) / dtMs : 0,
-                lastUpdatedAt: timestamp,
+              transform: { x: clampedX, y: clampedY, scale: newScale },
+              velocity: {
+                vx: dtMs > 0 ? (clampedX - pivoted.x) / dtMs : 0,
+                vy: dtMs > 0 ? (clampedY - pivoted.y) / dtMs : 0,
+                logVScale: dtMs > 0 ? Math.log(effectiveDScale) / dtMs : 0,
               },
-              y: {
-                value: clampedTy,
-                velocity: dtMs > 0 ? (clampedTy - pivoted.y) / dtMs : 0,
-                lastUpdatedAt: timestamp,
-              },
-              scale: applyExponentialFactor(
-                state.scale,
-                effectiveDScale,
-                timestamp,
-              ),
+              lastUpdatedAt: timestamp,
             };
           }
           case "release": {
             if (snapTarget) {
-              const target = snapTarget(state);
+              const target = snapTarget({
+                transform: state.transform,
+                velocity: state.velocity,
+              });
               if (target)
                 return {
                   type: "snapping",
-                  x: state.x,
-                  y: state.y,
-                  scale: state.scale,
+                  transform: state.transform,
+                  lastUpdatedAt: state.lastUpdatedAt,
                   target,
                 };
             }
             return {
               type: "inertia",
-              x: state.x,
-              y: state.y,
-              scale: state.scale,
+              transform: state.transform,
+              velocity: state.velocity,
+              lastUpdatedAt: state.lastUpdatedAt,
               origin: state.origin,
             };
           }
@@ -266,72 +238,66 @@ export function createTransformReduce(config?: TransformConfig) {
             return {
               type: "tracking",
               origin: state.origin,
-              x: state.x,
-              y: state.y,
-              scale: state.scale,
+              transform: state.transform,
+              velocity: state.velocity,
+              lastUpdatedAt: state.lastUpdatedAt,
             };
           case "release":
             return state;
           case "tick": {
             const timestamp = action.timestamp;
             if (
-              Math.abs(state.x.velocity) < VELOCITY_THRESHOLD &&
-              Math.abs(state.y.velocity) < VELOCITY_THRESHOLD &&
-              Math.abs(state.scale.logVelocity) < LOG_VELOCITY_THRESHOLD
+              Math.abs(state.velocity.vx) < VELOCITY_THRESHOLD &&
+              Math.abs(state.velocity.vy) < VELOCITY_THRESHOLD &&
+              Math.abs(state.velocity.logVScale) < LOG_VELOCITY_THRESHOLD
             ) {
               return settleTransform(state);
             }
-            // Advance inertia
-            const oldScale = state.scale.value;
-            const newScale = advanceExponentialInertia(state.scale, timestamp);
 
-            let finalScale = newScale;
+            const dtMs = computeDtMs(state.lastUpdatedAt, timestamp);
+
+            // Advance scale inertia in log-space.
+            const logScaleRetained = SCALE_LOG_INERTIA_DECAY ** dtMs;
+            let newLogVScale = state.velocity.logVScale * logScaleRetained;
+            let newScale =
+              state.transform.scale * Math.exp(newLogVScale * dtMs);
+
             if (bounds) {
               const minScale = computeMinScale(
                 bounds,
                 elementWidth,
                 elementHeight,
               );
-              if (newScale.value < minScale) {
-                finalScale = {
-                  value: minScale,
-                  logVelocity: 0,
-                  lastUpdatedAt: timestamp,
-                };
+              if (newScale < minScale) {
+                newScale = minScale;
+                newLogVScale = 0;
               }
             }
-            const ds = finalScale.value / oldScale;
+            const ds = newScale / state.transform.scale;
 
-            const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
-            const retainedFactor = 0.99 ** dtMs;
-            const newVx = state.x.velocity * retainedFactor;
-            const newVy = state.y.velocity * retainedFactor;
+            // Advance translate inertia; apply scale pivot to couple with scale change.
+            const translateRetained = TRANSLATE_INERTIA_DECAY ** dtMs;
+            const newVx = state.velocity.vx * translateRetained;
+            const newVy = state.velocity.vy * translateRetained;
 
             const pivoted = applyScalePivot(
-              state.x.value,
-              state.y.value,
-              state.origin,
+              state.transform,
               ds,
+              state.origin.x,
+              state.origin.y,
             );
-            let newX = {
-              value: pivoted.x + newVx * dtMs,
-              velocity: newVx,
-              lastUpdatedAt: timestamp,
-            };
-            let newY = {
-              value: pivoted.y + newVy * dtMs,
-              velocity: newVy,
-              lastUpdatedAt: timestamp,
-            };
             const clamped = clampPosition(
-              finalScale.value,
-              newX.value,
-              newY.value,
+              newScale,
+              pivoted.x + newVx * dtMs,
+              pivoted.y + newVy * dtMs,
             );
-            newX = { ...newX, value: clamped.x };
-            newY = { ...newY, value: clamped.y };
 
-            return { ...state, x: newX, y: newY, scale: finalScale };
+            return {
+              ...state,
+              transform: { x: clamped.x, y: clamped.y, scale: newScale },
+              velocity: { vx: newVx, vy: newVy, logVScale: newLogVScale },
+              lastUpdatedAt: timestamp,
+            };
           }
           case "toggle-zoom": {
             const target = computeToggleZoomTarget(
@@ -341,9 +307,8 @@ export function createTransformReduce(config?: TransformConfig) {
             );
             return {
               type: "snapping",
-              x: state.x,
-              y: state.y,
-              scale: state.scale,
+              transform: state.transform,
+              lastUpdatedAt: state.lastUpdatedAt,
               target,
             };
           }
@@ -356,9 +321,9 @@ export function createTransformReduce(config?: TransformConfig) {
             return {
               type: "tracking",
               origin: { x: 0, y: 0 },
-              x: state.x,
-              y: state.y,
-              scale: state.scale,
+              transform: state.transform,
+              velocity: { vx: 0, vy: 0, logVScale: 0 },
+              lastUpdatedAt: state.lastUpdatedAt,
             };
           case "release":
             return state;
@@ -366,53 +331,31 @@ export function createTransformReduce(config?: TransformConfig) {
             return state;
           case "tick": {
             if (
-              Math.abs(state.x.value - state.target.x) < SNAP_THRESHOLD &&
-              Math.abs(state.y.value - state.target.y) < SNAP_THRESHOLD &&
-              Math.abs(state.scale.value - state.target.scale) <
+              Math.abs(state.transform.x - state.target.x) < SNAP_THRESHOLD &&
+              Math.abs(state.transform.y - state.target.y) < SNAP_THRESHOLD &&
+              Math.abs(state.transform.scale - state.target.scale) <
                 SCALE_SNAP_THRESHOLD
             ) {
               return {
                 type: "settled",
-                x: {
-                  value: state.target.x,
-                  velocity: 0,
-                  lastUpdatedAt: action.timestamp,
-                },
-                y: {
-                  value: state.target.y,
-                  velocity: 0,
-                  lastUpdatedAt: action.timestamp,
-                },
-                scale: {
-                  value: state.target.scale,
-                  logVelocity: 0,
-                  lastUpdatedAt: action.timestamp,
-                },
+                transform: state.target,
+                lastUpdatedAt: action.timestamp,
               };
             }
             return {
               ...state,
-              x: {
-                value:
+              transform: {
+                x:
                   state.target.x +
-                  (state.x.value - state.target.x) * SNAP_DECAY,
-                velocity: 0,
-                lastUpdatedAt: action.timestamp,
-              },
-              y: {
-                value:
+                  (state.transform.x - state.target.x) * SNAP_DECAY,
+                y:
                   state.target.y +
-                  (state.y.value - state.target.y) * SNAP_DECAY,
-                velocity: 0,
-                lastUpdatedAt: action.timestamp,
-              },
-              scale: {
-                value:
+                  (state.transform.y - state.target.y) * SNAP_DECAY,
+                scale:
                   state.target.scale +
-                  (state.scale.value - state.target.scale) * SNAP_DECAY,
-                logVelocity: 0,
-                lastUpdatedAt: action.timestamp,
+                  (state.transform.scale - state.target.scale) * SNAP_DECAY,
               },
+              lastUpdatedAt: action.timestamp,
             };
           }
         }
@@ -426,9 +369,9 @@ export function createTransformReduce(config?: TransformConfig) {
               {
                 type: "tracking",
                 origin: { x: 0, y: 0 },
-                x: state.x,
-                y: state.y,
-                scale: state.scale,
+                transform: state.transform,
+                velocity: { vx: 0, vy: 0, logVScale: 0 },
+                lastUpdatedAt: state.lastUpdatedAt,
               },
               action,
             );
@@ -444,9 +387,8 @@ export function createTransformReduce(config?: TransformConfig) {
             );
             return {
               type: "snapping",
-              x: state.x,
-              y: state.y,
-              scale: state.scale,
+              transform: state.transform,
+              lastUpdatedAt: state.lastUpdatedAt,
               target,
             };
           }

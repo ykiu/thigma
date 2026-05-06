@@ -1,9 +1,5 @@
 import type { InterpreterEvent, StoreAction, Model } from "../types.js";
 import {
-  createLinearPrimitive,
-  createExponentialPrimitive,
-} from "./primitives.js";
-import {
   type TransformPrivateState,
   createTransformReduce,
   settleTransform,
@@ -78,8 +74,8 @@ function isHorizontalOverscroll(
   //   maxX = 0 (left edge can't go right of 0)
   //   minX = itemWidth * (1 - scale) (right edge must reach itemWidth)
   return (
-    (dx > 0 && item.x.value >= 0) ||
-    (dx < 0 && item.x.value <= itemWidth * (1 - item.scale.value))
+    (dx > 0 && item.transform.x >= 0) ||
+    (dx < 0 && item.transform.x <= itemWidth * (1 - item.transform.scale))
   );
 }
 
@@ -114,12 +110,12 @@ function toCarouselPublicState(
   > = {};
   for (const [id, item] of Object.entries(state.items)) {
     items[id] = {
-      transformX: item.x.value,
-      transformY: item.y.value,
-      scale: item.scale.value,
+      transformX: item.transform.x,
+      transformY: item.transform.y,
+      scale: item.transform.scale,
     };
   }
-  return { carouselTranslateX: state.carousel.x.value, items };
+  return { carouselTranslateX: state.carousel.transform.x, items };
 }
 
 export function createCarouselModel(
@@ -139,10 +135,10 @@ function createCarouselReduce(config: CarouselConfig) {
   });
 
   const carouselReduce = createTransformReduce({
-    snapTarget: (t) => ({
+    snapTarget: ({ transform, velocity }) => ({
       x: computeCarouselSnapTarget(
-        t.x.value,
-        t.x.velocity,
+        transform.x,
+        velocity.vx,
         itemWidth,
         itemIds.length,
       ),
@@ -156,9 +152,8 @@ function createCarouselReduce(config: CarouselConfig) {
     for (const id of itemIds) {
       items[id] = {
         type: "settled",
-        x: createLinearPrimitive(0),
-        y: createLinearPrimitive(0),
-        scale: createExponentialPrimitive(1),
+        transform: { x: 0, y: 0, scale: 1 },
+        lastUpdatedAt: NaN,
       };
     }
     return items;
@@ -205,9 +200,8 @@ function createCarouselReduce(config: CarouselConfig) {
       type: "free",
       carousel: {
         type: "settled",
-        x: createLinearPrimitive(0),
-        y: createLinearPrimitive(0),
-        scale: createExponentialPrimitive(1),
+        transform: { x: 0, y: 0, scale: 1 },
+        lastUpdatedAt: NaN,
       },
       items: makeInitialItems(),
     },
@@ -223,7 +217,7 @@ function createCarouselReduce(config: CarouselConfig) {
               if (action.itemId !== undefined) {
                 const item = state.items[action.itemId];
                 if (item) {
-                  const isZoomed = item.scale.value !== 1;
+                  const isZoomed = item.transform.scale !== 1;
                   const isInMotion = item.type !== "settled";
                   if (action.dScale !== 1 || isZoomed || isInMotion) {
                     const overscroll =

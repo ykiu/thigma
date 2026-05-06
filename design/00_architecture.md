@@ -176,10 +176,16 @@ type Options = {
 };
 ```
 
-#### ValuePrimitives
+#### Transform and TransformVelocity
 
-- The model reducers delegate tracking of the rate of change for transform and scale to sub-reducers called ValuePrimitives. There are two ValuePrimitive types: `LinearPrimitive` for translation and `ExponentialPrimitive` for scale. Both carry a `lastUpdatedAt: number` field (NaN when never updated). All primitive update functions accept a `timestamp` and compute `dtMs` internally. LinearPrimitive treats translation linearly; ExponentialPrimitive treats scale exponentially for a more natural pinch-to-zoom feel.
-- Velocity information is held inside the ValuePrimitives as internal state and is not included in the public `State`.
+The model reducers represent motion state as two flat types:
+
+- `Transform: { x: number; y: number; scale: number }` — current position and scale.
+- `TransformVelocity: { vx: number; vy: number; logVScale: number }` — rates of change. `vx`/`vy` are linear (px/ms); `logVScale` is in log-space (log-units/ms) for natural pinch-zoom behavior.
+
+`x`, `y`, and `scale` are treated as an atomic unit — operations that change scale also adjust translation via `applyScalePivot` to maintain the correct pivot point. A shared `lastUpdatedAt: number` (NaN when never updated) tracks when the state was last changed.
+
+Velocity is internal state and is not included in the public `State`.
 
 
 ## Store Module
