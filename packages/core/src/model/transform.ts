@@ -79,6 +79,18 @@ function computeMinScale(
   return minScale;
 }
 
+function applyScalePivot(
+  x: number,
+  y: number,
+  origin: { x: number; y: number },
+  ds: number,
+): { x: number; y: number } {
+  return {
+    x: origin.x + (x - origin.x) * ds,
+    y: origin.y + (y - origin.y) * ds,
+  };
+}
+
 const SNAP_DECAY = 0.95; // per-frame interpolation factor toward snap target
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
@@ -138,8 +150,12 @@ export function createTransformReduce(config?: TransformConfig) {
   ): TransformSnapTarget {
     if (Math.abs(state.scale.value - 1) < 0.01) {
       const ds = toggleZoomScale / state.scale.value;
-      let targetX = originX * (1 - ds) + state.x.value * ds;
-      let targetY = originY * (1 - ds) + state.y.value * ds;
+      let { x: targetX, y: targetY } = applyScalePivot(
+        state.x.value,
+        state.y.value,
+        { x: originX, y: originY },
+        ds,
+      );
       ({ x: targetX, y: targetY } = clampPosition(
         toggleZoomScale,
         targetX,
@@ -179,8 +195,17 @@ export function createTransformReduce(config?: TransformConfig) {
             }
             const newScale = state.scale.value * effectiveDScale;
 
-            const proposedTx = originX + (tx - originX) * effectiveDScale + dx;
-            const proposedTy = originY + (ty - originY) * effectiveDScale + dy;
+            // Velocity tracks pan-only contribution so that advanceInertia can
+            // handle the scale-pivot effect separately without double-counting.
+            const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
+            const pivoted = applyScalePivot(
+              tx,
+              ty,
+              { x: originX, y: originY },
+              effectiveDScale,
+            );
+            const proposedTx = pivoted.x + dx;
+            const proposedTy = pivoted.y + dy;
 
             const { x: clampedTx, y: clampedTy } = clampPosition(
               newScale,
@@ -188,23 +213,17 @@ export function createTransformReduce(config?: TransformConfig) {
               proposedTy,
             );
 
-            // Velocity tracks pan-only contribution so that advanceInertia can
-            // handle the scale-pivot effect separately without double-counting.
-            const dtMs = computeDtMs(state.x.lastUpdatedAt, timestamp);
-            const scalePivotTx = originX + (tx - originX) * effectiveDScale;
-            const scalePivotTy = originY + (ty - originY) * effectiveDScale;
-
             return {
               type: "tracking",
               origin: { x: originX, y: originY },
               x: {
                 value: clampedTx,
-                velocity: dtMs > 0 ? (clampedTx - scalePivotTx) / dtMs : 0,
+                velocity: dtMs > 0 ? (clampedTx - pivoted.x) / dtMs : 0,
                 lastUpdatedAt: timestamp,
               },
               y: {
                 value: clampedTy,
-                velocity: dtMs > 0 ? (clampedTy - scalePivotTy) / dtMs : 0,
+                velocity: dtMs > 0 ? (clampedTy - pivoted.y) / dtMs : 0,
                 lastUpdatedAt: timestamp,
               },
               scale: applyExponentialFactor(
@@ -273,19 +292,19 @@ export function createTransformReduce(config?: TransformConfig) {
             const newVy = state.y.velocity * retainedFactor;
 
             let finalScale = newScale;
+            const pivoted = applyScalePivot(
+              state.x.value,
+              state.y.value,
+              state.origin,
+              ds,
+            );
             let newX = {
-              value:
-                state.origin.x +
-                (state.x.value - state.origin.x) * ds +
-                newVx * dtMs,
+              value: pivoted.x + newVx * dtMs,
               velocity: newVx,
               lastUpdatedAt: timestamp,
             };
             let newY = {
-              value:
-                state.origin.y +
-                (state.y.value - state.origin.y) * ds +
-                newVy * dtMs,
+              value: pivoted.y + newVy * dtMs,
               velocity: newVy,
               lastUpdatedAt: timestamp,
             };
