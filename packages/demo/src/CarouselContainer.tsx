@@ -40,10 +40,10 @@ export function CarouselContainer({
     ];
     const store = createStore(
       createModel({
-        snapTarget: ({ x, y, scale }) => ({
-          x: snapX(x.value),
-          y: y.value,
-          scale: scale.value,
+        snapTarget: ({ transform: { x, y, scale } }) => ({
+          x: snapX(x),
+          y,
+          scale,
         }),
       }),
     )(interpreters);
