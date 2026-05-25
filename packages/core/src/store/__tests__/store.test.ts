@@ -191,6 +191,63 @@ describe("createStore", () => {
     store.unmount();
   });
 
+  it("dispatch applies action and resumes the loop", () => {
+    const interp = makeMockInterpreter();
+    const store = createStore(counterModel((s) => s))([interp]);
+    const snapshots: CounterState[] = [];
+    store.subscribe((s) => snapshots.push(s));
+
+    store.dispatch({
+      type: "motion",
+      timestamp: 0,
+      dx: 0,
+      dy: 0,
+      dScale: 1,
+      originX: 0,
+      originY: 0,
+    });
+    flushRaf();
+    expect(snapshots[0].motionCount).toBe(1);
+
+    store.unmount();
+  });
+
+  it("mount subscribes a new interpreter and returns an unmount fn", () => {
+    const store = createStore(counterModel((s) => s))([]);
+    const snapshots: CounterState[] = [];
+    store.subscribe((s) => snapshots.push(s));
+
+    const late = makeMockInterpreter();
+    const unmountLate = store.mount(late);
+
+    late.emit({
+      type: "motion",
+      timestamp: 0,
+      dx: 10,
+      dy: 0,
+      dScale: 1,
+      originX: 0,
+      originY: 0,
+    });
+    flushRaf();
+    expect(snapshots[0].motionCount).toBe(1);
+
+    unmountLate();
+    late.emit({
+      type: "motion",
+      timestamp: 8,
+      dx: 10,
+      dy: 0,
+      dScale: 1,
+      originX: 0,
+      originY: 0,
+    });
+    flushRaf();
+    expect(snapshots[0].motionCount).toBe(1); // still 1, interpreter was unmounted
+
+    store.unmount();
+  });
+
   it("stops notifying after unmount", () => {
     const interp = makeMockInterpreter();
     const store = createStore(counterModel((s) => s))([interp]);

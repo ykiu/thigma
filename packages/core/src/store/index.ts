@@ -4,16 +4,23 @@ import type {
   MountedInterpreter,
   Callback,
   UnsubscribeFn,
+  UnmountFn,
   Model,
+  StoreAction,
 } from "../types.js";
 
-export function createStore<TPrivateState, TState>(
-  model: Model<TState, TPrivateState>,
-): Store<TState> {
-  return (interpreters: MountedInterpreter[]): MountedStore<TState> => {
+export function createStore<TPrivateState, TState, TAction = StoreAction>(
+  model: Model<TState, TPrivateState, TAction>,
+): Store<TState, TAction> {
+  return (
+    interpreters: MountedInterpreter[],
+  ): MountedStore<TState, TAction> => {
     const callbacks = new Set<Callback<TState>>();
 
-    let state = model.reduce(undefined, { type: "tick", timestamp: 0 });
+    let state = model.reduce(undefined, {
+      type: "tick",
+      timestamp: 0,
+    } as unknown as TAction);
     let lastEmittedState: TPrivateState | undefined;
 
     let rafId: number | null = null;
@@ -21,7 +28,10 @@ export function createStore<TPrivateState, TState>(
 
     function loop(timestamp: number) {
       if (!mounted) return;
-      state = model.reduce(state, { type: "tick", timestamp });
+      state = model.reduce(state, {
+        type: "tick",
+        timestamp,
+      } as unknown as TAction);
       if (state === lastEmittedState) {
         rafId = null;
         return;
@@ -38,15 +48,19 @@ export function createStore<TPrivateState, TState>(
       }
     }
 
-    // Subscribe to all interpreters
-    const unsubscribers = interpreters.map((interp) =>
-      interp.subscribe((event) => {
-        state = model.reduce(state, event);
-        resumeLoop();
-      }),
-    );
+    function dispatch(action: TAction) {
+      state = model.reduce(state, action);
+      resumeLoop();
+    }
 
-    // Start the loop
+    function mount(interp: MountedInterpreter): UnmountFn {
+      return interp.subscribe((event) => {
+        dispatch(event as unknown as TAction);
+      });
+    }
+
+    const unsubscribers: UnsubscribeFn[] = interpreters.map(mount);
+
     rafId = requestAnimationFrame(loop);
 
     return {
@@ -54,6 +68,8 @@ export function createStore<TPrivateState, TState>(
         callbacks.add(cb);
         return () => callbacks.delete(cb);
       },
+      dispatch,
+      mount,
       unmount() {
         mounted = false;
         if (rafId !== null) cancelAnimationFrame(rafId);

@@ -26,4 +26,5 @@ export {
   createCarouselModel,
   type CarouselConfig,
   type CarouselPublicState,
+  type CarouselAction,
 } from "./model/index.js";

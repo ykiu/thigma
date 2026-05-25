@@ -43,14 +43,16 @@ export type MountedInterpreter = {
 
 export type Interpreter = (element: Element) => MountedInterpreter;
 
-export type MountedStore<TState> = {
+export type MountedStore<TState, TAction = StoreAction> = {
   subscribe: (cb: Callback<TState>) => UnsubscribeFn;
+  dispatch: (action: TAction) => void;
+  mount: (interpreter: MountedInterpreter) => UnmountFn;
   unmount: UnmountFn;
 };
 
-export type Store<TState> = (
+export type Store<TState, TAction = StoreAction> = (
   interpreters: MountedInterpreter[],
-) => MountedStore<TState>;
+) => MountedStore<TState, TAction>;
 
 export type StoreAction =
   | InterpreterEvent

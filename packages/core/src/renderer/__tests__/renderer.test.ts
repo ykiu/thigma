@@ -12,6 +12,8 @@ function makeMockStore(): MountedStore<State> & { emit: (s: State) => void } {
       callbacks.add(cb);
       return () => callbacks.delete(cb);
     },
+    dispatch: vi.fn(),
+    mount: vi.fn(() => vi.fn()),
     unmount: vi.fn(),
   };
 }
