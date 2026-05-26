@@ -1,35 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createStore } from "../index.js";
-import type {
-  MountedInterpreter,
-  Callback,
-  InterpreterEvent,
-  StoreAction,
-  Model,
-} from "../../types.js";
+import type { InterpreterEvent, StoreAction, Model } from "../../types.js";
 
-function makeMockInterpreter(): MountedInterpreter & {
-  emit: (event: InterpreterEvent) => void;
-} {
-  const callbacks = new Set<Callback<InterpreterEvent>>();
-  return {
-    emit(event: InterpreterEvent) {
-      for (const cb of callbacks) cb(event);
-    },
-    subscribe(cb: Callback<InterpreterEvent>) {
-      callbacks.add(cb);
-      return () => callbacks.delete(cb);
-    },
-    unmount: vi.fn(),
-  };
-}
-
-// Simple counter state for testing the store in isolation from the model
+// Store tests use a motion-counting model to verify dispatch drives the loop.
 type CounterState = { motionCount: number };
+type CounterAction = InterpreterEvent | StoreAction;
 
 function counterReduce(
   state: CounterState | undefined = { motionCount: 0 },
-  action: StoreAction,
+  action: CounterAction,
 ): CounterState {
   if (action.type === "motion") return { motionCount: state.motionCount + 1 };
   return state;
@@ -37,9 +16,19 @@ function counterReduce(
 
 function counterModel<TPublicState>(
   publish: (s: CounterState) => TPublicState,
-): Model<TPublicState, CounterState> {
+): Model<TPublicState, CounterState, CounterAction> {
   return { reduce: counterReduce, publish };
 }
+
+const motionEvent: InterpreterEvent = {
+  type: "motion",
+  timestamp: 0,
+  dx: 10,
+  dy: 0,
+  dScale: 1,
+  originX: 0,
+  originY: 0,
+};
 
 // Manual rAF control — lets tests trigger animation frames deterministically
 // without depending on fake timer implementation details.
@@ -65,22 +54,20 @@ afterEach(() => {
 
 describe("createStore", () => {
   it("calls reducer with undefined state on initialization", () => {
-    const interp = makeMockInterpreter();
     const firstArgs: Array<CounterState | undefined> = [];
     function spyReduce(
       state: CounterState | undefined,
-      action: StoreAction,
+      action: CounterAction,
     ): CounterState {
       firstArgs.push(state);
       return counterReduce(state, action);
     }
-    createStore({ reduce: spyReduce, publish: (s) => s })([interp]);
+    createStore({ reduce: spyReduce, publish: (s) => s });
     expect(firstArgs[0]).toBeUndefined();
   });
 
   it("notifies subscribers on the first frame with the initial state", () => {
-    const interp = makeMockInterpreter();
-    const store = createStore(counterModel((s) => s))([interp]);
+    const store = createStore(counterModel((s) => s));
     const snapshots: CounterState[] = [];
     store.subscribe((s) => snapshots.push(s));
 
@@ -92,8 +79,7 @@ describe("createStore", () => {
   });
 
   it("pauses the loop when state reference is unchanged after a tick", () => {
-    const interp = makeMockInterpreter();
-    const store = createStore(counterModel((s) => s))([interp]);
+    const store = createStore(counterModel((s) => s));
     const snapshots: CounterState[] = [];
     store.subscribe((s) => snapshots.push(s));
 
@@ -106,24 +92,15 @@ describe("createStore", () => {
     store.unmount();
   });
 
-  it("resumes the loop when an interpreter event changes state", () => {
-    const interp = makeMockInterpreter();
-    const store = createStore(counterModel((s) => s))([interp]);
+  it("resumes the loop when dispatch changes state", () => {
+    const store = createStore(counterModel((s) => s));
     const snapshots: CounterState[] = [];
     store.subscribe((s) => snapshots.push(s));
 
     flushRaf(); // initial state, then pauses
     expect(snapshots.length).toBe(1);
 
-    interp.emit({
-      type: "motion",
-      timestamp: 0,
-      dx: 10,
-      dy: 0,
-      dScale: 1,
-      originX: 0,
-      originY: 0,
-    });
+    store.dispatch(motionEvent);
     flushRaf(); // loop resumed, new state emitted
     expect(snapshots.length).toBe(2);
     expect(snapshots[1].motionCount).toBe(1);
@@ -134,30 +111,13 @@ describe("createStore", () => {
     store.unmount();
   });
 
-  it("forwards interpreter events to the reducer before the next frame", () => {
-    const interp = makeMockInterpreter();
-    const store = createStore(counterModel((s) => s))([interp]);
+  it("batches multiple dispatches before the next frame", () => {
+    const store = createStore(counterModel((s) => s));
     const snapshots: CounterState[] = [];
     store.subscribe((s) => snapshots.push(s));
 
-    interp.emit({
-      type: "motion",
-      timestamp: 0,
-      dx: 50,
-      dy: 30,
-      dScale: 1,
-      originX: 0,
-      originY: 0,
-    });
-    interp.emit({
-      type: "motion",
-      timestamp: 8,
-      dx: 10,
-      dy: 0,
-      dScale: 1,
-      originX: 0,
-      originY: 0,
-    });
+    store.dispatch(motionEvent);
+    store.dispatch(motionEvent);
 
     flushRaf();
 
@@ -167,23 +127,14 @@ describe("createStore", () => {
   });
 
   it("applies publish before notifying subscribers", () => {
-    const interp = makeMockInterpreter();
     const store = createStore(
       counterModel((state) => ({ doubled: state.motionCount * 2 })),
-    )([interp]);
+    );
 
     const snapshots: { doubled: number }[] = [];
     store.subscribe((s) => snapshots.push(s));
 
-    interp.emit({
-      type: "motion",
-      timestamp: 0,
-      dx: 10,
-      dy: 0,
-      dScale: 1,
-      originX: 0,
-      originY: 0,
-    });
+    store.dispatch(motionEvent);
     flushRaf();
 
     expect(snapshots[0].doubled).toBe(2);
@@ -192,21 +143,12 @@ describe("createStore", () => {
   });
 
   it("stops notifying after unmount", () => {
-    const interp = makeMockInterpreter();
-    const store = createStore(counterModel((s) => s))([interp]);
+    const store = createStore(counterModel((s) => s));
     const snapshots: CounterState[] = [];
     store.subscribe((s) => snapshots.push(s));
 
     store.unmount();
-    interp.emit({
-      type: "motion",
-      timestamp: 0,
-      dx: 50,
-      dy: 0,
-      dScale: 1,
-      originX: 0,
-      originY: 0,
-    });
+    store.dispatch(motionEvent);
     flushRaf();
 
     expect(snapshots).toHaveLength(0);

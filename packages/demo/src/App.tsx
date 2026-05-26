@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { PinchPanContainer } from "./PinchPanContainer.js";
 import { CarouselContainer } from "./CarouselContainer.js";
-import { ScalableCarouselContainer } from "./ScalableCarouselContainer.js";
+import {
+  ScalableCarouselContainer,
+  ScalableCarouselItem,
+} from "./ScalableCarouselContainer.js";
 
 const IMAGE_URL = "https://picsum.photos/id/599/400/300";
 
@@ -95,9 +98,11 @@ export function App() {
       {tab === "scalable-carousel" && (
         <div className="flex-1 flex flex-col justify-center bg-gray-900">
           <ScalableCarouselContainer
-            items={SCALABLE_CAROUSEL_ITEMS.map(({ id, photoId }) => ({
-              id,
-              children: (
+            itemWidth={SCALABLE_CAROUSEL_ITEM_WIDTH}
+            itemHeight={SCALABLE_CAROUSEL_ITEM_HEIGHT}
+          >
+            {SCALABLE_CAROUSEL_ITEMS.map(({ id, photoId }) => (
+              <ScalableCarouselItem key={id} id={id}>
                 <img
                   src={`https://picsum.photos/id/${photoId}/${SCALABLE_CAROUSEL_ITEM_WIDTH}/${SCALABLE_CAROUSEL_ITEM_HEIGHT}`}
                   alt={id}
@@ -110,11 +115,9 @@ export function App() {
                     userSelect: "none",
                   }}
                 />
-              ),
-            }))}
-            itemWidth={SCALABLE_CAROUSEL_ITEM_WIDTH}
-            itemHeight={SCALABLE_CAROUSEL_ITEM_HEIGHT}
-          />
+              </ScalableCarouselItem>
+            ))}
+          </ScalableCarouselContainer>
           <p className="text-center text-gray-500 text-sm py-2">
             Drag or swipe to navigate · Pinch to zoom · Snaps back on release
           </p>

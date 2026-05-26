@@ -1,4 +1,6 @@
-import type { StoreAction } from "../types.js";
+import type { InterpreterEvent, StoreAction } from "../types.js";
+
+export type TransformAction = InterpreterEvent | StoreAction;
 import {
   type Transform,
   type TransformVelocity,
@@ -150,7 +152,7 @@ export function createTransformReduce(config?: TransformConfig) {
       transform: { x: 0, y: 0, scale: 1 },
       lastUpdatedAt: NaN,
     },
-    action: StoreAction,
+    action: TransformAction,
   ): TransformPrivateState {
     switch (state.type) {
       case "tracking": {

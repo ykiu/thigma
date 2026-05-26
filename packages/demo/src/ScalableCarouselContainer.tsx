@@ -1,26 +1,42 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   touchInterpreter,
   mouseDragInterpreter,
   createStore,
   createCarouselModel,
+  type Store,
   type MountedInterpreter,
-  type InterpreterEvent,
   mouseWheelInterpreter,
   doubleTapInterpreter,
+  type CarouselAction,
+  type CarouselPublicState,
 } from "@mimosa/core";
 
-type ScalableCarouselItem = {
-  id: string;
-  children: ReactNode;
-};
+// ---------------------------------------------------------------------------
+// Context
+// ---------------------------------------------------------------------------
 
-type Props = {
-  items: ScalableCarouselItem[];
+type CarouselContextValue = {
+  store: Store<CarouselPublicState, CarouselAction>;
   itemWidth: number;
   itemHeight: number;
-  className?: string;
 };
+
+const CarouselContext = createContext<CarouselContextValue | null>(null);
+
+// ---------------------------------------------------------------------------
+// withItemId — tags all events from an interpreter with an item ID
+// ---------------------------------------------------------------------------
 
 function withItemId(
   interp: MountedInterpreter,
@@ -28,65 +44,167 @@ function withItemId(
 ): MountedInterpreter {
   return {
     subscribe(cb) {
-      return interp.subscribe((event: InterpreterEvent) =>
-        cb({ ...event, itemId }),
-      );
+      return interp.subscribe((event) => cb({ ...event, itemId }));
     },
     unmount: () => interp.unmount(),
   };
 }
 
+// ---------------------------------------------------------------------------
+// ScalableCarouselItem
+// ---------------------------------------------------------------------------
+
+type ScalableCarouselItemProps = {
+  id: string;
+  children?: ReactNode;
+};
+
+export function ScalableCarouselItem({
+  id,
+  children,
+}: ScalableCarouselItemProps) {
+  const ctx = useContext(CarouselContext);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Mount interpreters for this item.
+  useEffect(() => {
+    if (!ctx) return;
+    const { store } = ctx;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const interpreters: MountedInterpreter[] = [
+      withItemId(touchInterpreter()(viewport), id),
+      withItemId(mouseDragInterpreter()(viewport), id),
+      withItemId(mouseWheelInterpreter()(viewport), id),
+      withItemId(doubleTapInterpreter()(viewport), id),
+    ];
+
+    const unmounts = interpreters.map((interp) =>
+      interp.subscribe((e) => store.dispatch(e)),
+    );
+    return () => {
+      for (const unmount of unmounts) unmount();
+      for (const interp of interpreters) interp.unmount();
+    };
+  }, [ctx, id]);
+
+  // Subscribe to store and apply this item's transform.
+  useEffect(() => {
+    if (!ctx) return;
+    return ctx.store.subscribe((state) => {
+      const el = contentRef.current;
+      const itemState = state.items[id];
+      if (el && itemState) {
+        el.style.transform = `translate(${itemState.transformX}px, ${itemState.transformY}px) scale(${itemState.scale})`;
+        el.style.transformOrigin = "0 0";
+      }
+    });
+  }, [ctx, id]);
+
+  return (
+    <div
+      ref={viewportRef}
+      style={{
+        width: ctx?.itemWidth ?? 0,
+        height: ctx?.itemHeight ?? 0,
+        flexShrink: 0,
+        overflow: "hidden",
+        cursor: "grab",
+      }}
+    >
+      <div ref={contentRef} style={{ width: "100%", height: "100%" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ScalableCarouselContainer
+// ---------------------------------------------------------------------------
+
+type Props = {
+  children?: ReactNode;
+  itemWidth: number;
+  itemHeight: number;
+  className?: string;
+};
+
+function deriveItemIds(children: ReactNode): readonly string[] {
+  return Children.toArray(children)
+    .filter(
+      (child): child is React.ReactElement<ScalableCarouselItemProps> =>
+        isValidElement(child) &&
+        (child.type as unknown) === ScalableCarouselItem,
+    )
+    .map((child) => child.props.id);
+}
+
 export function ScalableCarouselContainer({
-  items,
+  children,
   itemWidth,
   itemHeight,
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
-  const itemContentRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const itemViewportRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [store, setStore] = useState<Store<
+    CarouselPublicState,
+    CarouselAction
+  > | null>(null);
 
+  // Keep a ref to the latest itemIds so effects can read the current value
+  // without needing it in their dependency arrays (the array is a new reference
+  // every render even when content is unchanged).
+  const itemIds = deriveItemIds(children);
+  const itemIdsRef = useRef<readonly string[]>(itemIds);
+  itemIdsRef.current = itemIds;
+
+  // Stable string key used as a dep to detect actual content changes.
+  const itemIdsKey = itemIds.join(",");
+
+  // Create the store once per itemWidth/itemHeight.
   useEffect(() => {
-    const strip = stripRef.current;
-    if (!strip) return;
-
-    const allInterpreters: MountedInterpreter[] = [];
-    for (const item of items) {
-      const viewport = itemViewportRefs.current.get(item.id);
-      if (!viewport) continue;
-      allInterpreters.push(
-        withItemId(touchInterpreter()(viewport), item.id),
-        withItemId(mouseDragInterpreter()(viewport), item.id),
-        withItemId(mouseWheelInterpreter()(viewport), item.id),
-        withItemId(doubleTapInterpreter()(viewport), item.id),
-      );
-    }
-
-    const store = createStore(
+    const s = createStore(
       createCarouselModel({
         itemWidth,
         itemHeight,
-        itemIds: items.map((i) => i.id),
+        itemIds: itemIdsRef.current,
       }),
-    )(allInterpreters);
+    );
 
-    const unsubscribe = store.subscribe((state) => {
-      strip.style.transform = `translateX(${state.carouselTranslateX}px)`;
-      for (const [id, itemState] of Object.entries(state.items)) {
-        const el = itemContentRefs.current.get(id);
-        if (el) {
-          el.style.transform = `translate(${itemState.transformX}px, ${itemState.transformY}px) scale(${itemState.scale})`;
-          el.style.transformOrigin = "0 0";
-        }
+    setStore(s);
+
+    const unsubscribe = s.subscribe((state) => {
+      if (stripRef.current) {
+        stripRef.current.style.transform = `translateX(${state.carouselTranslateX}px)`;
       }
     });
 
     return () => {
       unsubscribe();
-      store.unmount();
-      for (const interp of allInterpreters) interp.unmount();
+      s.unmount();
+      setStore(null);
     };
-  }, [items, itemWidth, itemHeight]);
+  }, [itemWidth, itemHeight]);
+
+  // Dispatch set-config whenever the item list changes after the store is ready.
+  // itemIdsKey is included as a trigger dep even though itemIdsRef.current is
+  // what's read inside — the ref is always current, the key signals the change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: itemIdsKey is an intentional trigger dep for itemIdsRef.current
+  useEffect(() => {
+    if (!store) return;
+    store.dispatch({
+      type: "set-config",
+      config: { itemWidth, itemHeight, itemIds: itemIdsRef.current },
+    });
+  }, [store, itemWidth, itemHeight, itemIdsKey]);
+
+  const contextValue = useMemo(
+    () => (store ? { store, itemWidth, itemHeight } : null),
+    [store, itemWidth, itemHeight],
+  );
 
   return (
     <div
@@ -94,30 +212,9 @@ export function ScalableCarouselContainer({
       style={{ overflow: "hidden", touchAction: "none" }}
     >
       <div ref={stripRef} style={{ display: "flex" }}>
-        {items.map((item) => (
-          <div
-            key={item.id}
-            ref={(el) => {
-              if (el) itemViewportRefs.current.set(item.id, el);
-            }}
-            style={{
-              width: itemWidth,
-              height: itemHeight,
-              flexShrink: 0,
-              overflow: "hidden",
-              cursor: "grab",
-            }}
-          >
-            <div
-              ref={(el) => {
-                if (el) itemContentRefs.current.set(item.id, el);
-              }}
-              style={{ width: "100%", height: "100%" }}
-            >
-              {item.children}
-            </div>
-          </div>
-        ))}
+        <CarouselContext.Provider value={contextValue}>
+          {children}
+        </CarouselContext.Provider>
       </div>
     </div>
   );

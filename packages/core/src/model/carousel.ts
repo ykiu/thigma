@@ -1,6 +1,7 @@
-import type { InterpreterEvent, StoreAction, Model } from "../types.js";
+import type { Model } from "../types.js";
 import {
   type TransformPrivateState,
+  type TransformAction,
   createTransformReduce,
   settleTransform,
 } from "./transform.js";
@@ -28,6 +29,10 @@ export type CarouselPublicState = {
   >;
 };
 
+export type CarouselAction =
+  | TransformAction
+  | { type: "set-config"; config: CarouselConfig };
+
 // ---------------------------------------------------------------------------
 // Internal types
 // ---------------------------------------------------------------------------
@@ -44,22 +49,25 @@ export type CarouselPublicState = {
 export type CarouselPrivateState =
   | {
       type: "free";
+      itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
   | {
       type: "carousel";
+      itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
   | {
       type: "items";
+      itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
       activeItemId: string;
     };
 
-type MotionEvent = Extract<InterpreterEvent, { type: "motion" }>;
+type MotionEvent = Extract<TransformAction, { type: "motion" }>;
 
 // ---------------------------------------------------------------------------
 // Item bounds helper
@@ -120,13 +128,16 @@ function toCarouselPublicState(
 
 export function createCarouselModel(
   config: CarouselConfig,
-): Model<CarouselPublicState, CarouselPrivateState, StoreAction> {
+): Model<CarouselPublicState, CarouselPrivateState, CarouselAction> {
   const reduce = createCarouselReduce(config);
   return { reduce, publish: toCarouselPublicState };
 }
 
 function createCarouselReduce(config: CarouselConfig) {
   const { itemWidth, itemHeight, itemIds } = config;
+
+  // Mutable item count so the snap-target closure always uses the latest value.
+  let itemCount = itemIds.length;
 
   const itemReduce = createTransformReduce({
     elementWidth: itemWidth,
@@ -140,7 +151,7 @@ function createCarouselReduce(config: CarouselConfig) {
         transform.x,
         velocity.vx,
         itemWidth,
-        itemIds.length,
+        itemCount,
       ),
       y: 0,
       scale: 1,
@@ -195,9 +206,119 @@ function createCarouselReduce(config: CarouselConfig) {
     return changed ? result : items;
   }
 
+  // ---------------------------------------------------------------------------
+  // set-config helpers
+  // ---------------------------------------------------------------------------
+
+  function shiftCarouselTransform(
+    carousel: TransformPrivateState,
+    delta: number,
+    minX: number,
+  ): TransformPrivateState {
+    if (delta === 0) return carousel;
+    switch (carousel.type) {
+      case "snapping": {
+        // Don't clamp the current transform — it's mid-animation and will
+        // converge naturally to the (clamped) target.
+        const newTargetX = Math.max(
+          minX,
+          Math.min(0, carousel.target.x + delta),
+        );
+        return {
+          ...carousel,
+          transform: {
+            ...carousel.transform,
+            x: carousel.transform.x + delta,
+          },
+          target: { ...carousel.target, x: newTargetX },
+        };
+      }
+      default: {
+        const newX = Math.max(minX, Math.min(0, carousel.transform.x + delta));
+        return { ...carousel, transform: { ...carousel.transform, x: newX } };
+      }
+    }
+  }
+
+  function applySetConfig(
+    state: CarouselPrivateState,
+    newConfig: CarouselConfig,
+  ): CarouselPrivateState {
+    const newItemIds = newConfig.itemIds;
+
+    // Find the item the carousel is heading toward in the current list.
+    const carousel = state.carousel;
+    let anchorTargetX: number;
+    if (carousel.type === "snapping") {
+      anchorTargetX = carousel.target.x;
+    } else {
+      const vx =
+        carousel.type === "tracking" || carousel.type === "inertia"
+          ? carousel.velocity.vx
+          : 0;
+      anchorTargetX = computeCarouselSnapTarget(
+        carousel.transform.x,
+        vx,
+        itemWidth,
+        state.itemIds.length,
+      );
+    }
+    const oldAnchorIndex = Math.max(
+      0,
+      Math.min(
+        state.itemIds.length - 1,
+        Math.round(-anchorTargetX / itemWidth),
+      ),
+    );
+    const anchorId = state.itemIds[oldAnchorIndex];
+
+    // Find anchor in new list; fall back to nearest valid index if deleted.
+    let newAnchorIndex = newItemIds.indexOf(anchorId);
+    if (newAnchorIndex < 0) {
+      newAnchorIndex = Math.max(
+        0,
+        Math.min(newItemIds.length - 1, oldAnchorIndex),
+      );
+    }
+
+    const delta = (oldAnchorIndex - newAnchorIndex) * itemWidth;
+    const minX =
+      newItemIds.length > 0 ? -(newItemIds.length - 1) * itemWidth : 0;
+    const newCarousel = shiftCarouselTransform(carousel, delta, minX);
+
+    const newItems: Record<string, TransformPrivateState> = {};
+    for (const id of newItemIds) {
+      newItems[id] = state.items[id] ?? {
+        type: "settled",
+        transform: { x: 0, y: 0, scale: 1 },
+        lastUpdatedAt: NaN,
+      };
+    }
+
+    // Update the mutable count so the snap-target closure stays current.
+    itemCount = newItemIds.length;
+
+    if (state.type === "items" && !newItemIds.includes(state.activeItemId)) {
+      return {
+        type: "free",
+        itemIds: newItemIds,
+        carousel: newCarousel,
+        items: newItems,
+      };
+    }
+
+    return {
+      ...state,
+      itemIds: newItemIds,
+      carousel: newCarousel,
+      items: newItems,
+    };
+  }
+
   return function reduce(
     state: CarouselPrivateState | undefined = {
       type: "free",
+      itemIds,
       carousel: {
         type: "settled",
         transform: { x: 0, y: 0, scale: 1 },
@@ -205,8 +326,12 @@ function createCarouselReduce(config: CarouselConfig) {
       },
       items: makeInitialItems(),
     },
-    action: StoreAction,
+    action: CarouselAction,
   ): CarouselPrivateState {
+    if (action.type === "set-config") {
+      return applySetConfig(state, action.config);
+    }
+
     switch (state.type) {
       case "free": {
         switch (action.type) {
@@ -229,6 +354,7 @@ function createCarouselReduce(config: CarouselConfig) {
                       // Lock to item
                       return {
                         type: "items",
+                        itemIds: state.itemIds,
                         carousel: state.carousel,
                         items: lockItems(state.items, action.itemId, action),
                         activeItemId: action.itemId,
@@ -246,7 +372,12 @@ function createCarouselReduce(config: CarouselConfig) {
               originY: 0,
             };
             const carousel = carouselReduce(state.carousel, normalizedAction);
-            return { type: "carousel", carousel, items: state.items };
+            return {
+              type: "carousel",
+              itemIds: state.itemIds,
+              carousel,
+              items: state.items,
+            };
           }
           case "release":
             return state;
@@ -296,7 +427,12 @@ function createCarouselReduce(config: CarouselConfig) {
           }
           case "release": {
             const carousel = carouselReduce(state.carousel, action);
-            return { type: "free", carousel, items: state.items };
+            return {
+              type: "free",
+              itemIds: state.itemIds,
+              carousel,
+              items: state.items,
+            };
           }
           case "toggle-zoom":
             return state;
@@ -334,7 +470,12 @@ function createCarouselReduce(config: CarouselConfig) {
                 action,
               ),
             };
-            return { type: "free", carousel: state.carousel, items };
+            return {
+              type: "free",
+              itemIds: state.itemIds,
+              carousel: state.carousel,
+              items,
+            };
           }
           case "toggle-zoom": {
             if (action.itemId !== state.activeItemId) return state;

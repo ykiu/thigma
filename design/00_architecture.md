@@ -150,7 +150,7 @@ The Model module provides factory functions for several pre-built Models for com
 
 
 ```typescript
-declare function createModel(options: { /* model-specific options */ }): Model<State, TransformPrivateState, StoreAction>;
+declare function createModel(options: { /* model-specific options */ }): Model<State, TransformPrivateState, TransformAction>;
 ```
 
 #### Single-Item Transform Model
@@ -166,7 +166,7 @@ type Options = {
 
 #### Multi-Item Carousel Model
 
-A Model for multi-item carousels that support per-item pinch-to-zoom.:
+A Model for multi-item carousels that support per-item pinch-to-zoom. Its action type extends `StoreAction` with a `set-config` action that allows changing the item list at runtime:
 
 ```typescript
 type Options = {
@@ -174,7 +174,11 @@ type Options = {
   itemHeight: number;  // item container height (px)
   itemIds: readonly string[];  // ordered list of item identifiers
 };
+
+type CarouselAction = TransformAction | { type: "set-config"; config: CarouselConfig };
 ```
+
+Dispatching `set-config` updates the item list while preserving carousel animation state. The carousel strip stays anchored to the item the gesture was heading toward; deleted items lose their transform state; new items start at the neutral transform. If the active item (currently being panned/zoomed) is deleted, the model transitions immediately to the `free` state.
 
 #### Transform and TransformVelocity
 
@@ -190,30 +194,30 @@ Velocity is internal state and is not included in the public `State`.
 
 ## Store Module
 
-The Store module is a generic animation loop. It subscribes to Interpreter events, applies them to a reducer, and emits the resulting public state to subscribers on every animation frame.
+The Store module is a generic animation loop. It drives the animation frame, dispatches tick actions on each frame to advance inertia or spring animations, and emits the resulting public state to subscribers.
 
-The Store has a continuous update loop driven by `requestAnimationFrame()`. Motion events received from Interpreters are applied to the reducer. The tick action is dispatched on each frame to advance inertia or spring animations.
+The Store has a continuous update loop driven by `requestAnimationFrame()`. The tick action is dispatched on each frame. Gesture events from Interpreters reach the reducer via `dispatch`, which the caller wires up externally.
 
-The Store's update loop emits state to subscribers on every frame where the state changes. The loop pauses automatically when the reducer returns the same object reference as the previous state (indicating the state has settled), and resumes when an Interpreter emits a new event. This pause/resume behavior is an implementation detail of the Store — other modules must not depend on it. The reference equality contract described in [State Machine Design](#state-machine-design) is what enables this optimization.
+The Store's update loop emits state to subscribers on every frame where the state changes. The loop pauses automatically when the reducer returns the same object reference as the previous state (indicating the state has settled), and resumes when `dispatch` is called. This pause/resume behavior is an implementation detail of the Store — other modules must not depend on it. The reference equality contract described in [State Machine Design](#state-machine-design) is what enables this optimization.
 
 ```typescript
-type Store<TState> = (interpreters: MountedInterpreter[]) => MountedStore<TState>;
-type MountedStore<TState> = {
+type Store<TState, TAction = StoreAction> = {
   subscribe: (cb: Callback<TState>) => UnsubscribeFn;
+  dispatch: (action: TAction) => void;
   unmount: UnmountFn;
 };
 
-declare function createStore<TPrivateState, TState>(
-  model: Model<TState, TPrivateState, StoreAction>,
-): Store<TState>;
+declare function createStore<TPrivateState, TState, TExtraAction = never>(
+  model: Model<TState, TPrivateState, StoreAction | TExtraAction>,
+): Store<TState, StoreAction | TExtraAction>;
 ```
 
-Mounting the `MountedInterpreter[]` passed to the Store (i.e., calling the Interpreters) is the responsibility of the caller.
-
-To create a transform store with the default Model:
+To create a transform store and wire up interpreters:
 
 ```typescript
 const store = createStore(createModel(snapConfig));
+const stops = interpreters.map(i => i.subscribe(e => store.dispatch(e)));
+// Later: stops.forEach(stop => stop()); store.unmount(); interpreters.forEach(i => i.unmount());
 ```
 
 ## Renderer Module
@@ -223,7 +227,7 @@ The Renderer module receives transform information from the Store and applies it
 The Renderer subscribes to the Store and updates the target element's CSS transform whenever State changes. The Renderer holds no internal state and is responsible only for side effects (DOM updates).
 
 ```typescript
-type Renderer = (element: Element, store: MountedStore) => MountedRenderer;
+type Renderer = (element: Element, store: Store) => MountedRenderer;
 type MountedRenderer = {
   unmount: UnmountFn;
 };
@@ -234,7 +238,7 @@ declare function createRenderer(): Renderer;
 ## Module Dependencies
 
 - The Renderer depends on the Store. The Renderer subscribes to the Store's state and applies transformations to the target element.
-- The Store depends on the Interpreter and the Model. The Store wires them together into an animation loop.
+- The Store depends on the Model. The Store drives the animation loop and forwards externally dispatched actions to the Model.
 - The Model does not depend on the Store, Interpreter, or Renderer. It is a pure function from state and action to state.
 - The Interpreter does not depend on the Store, Model, or Renderer. The Interpreter focuses solely on processing user input and generating Motion.
 

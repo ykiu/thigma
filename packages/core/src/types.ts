@@ -43,18 +43,13 @@ export type MountedInterpreter = {
 
 export type Interpreter = (element: Element) => MountedInterpreter;
 
-export type MountedStore<TState> = {
+export type Store<TState, TAction = StoreAction> = {
   subscribe: (cb: Callback<TState>) => UnsubscribeFn;
+  dispatch: (action: TAction) => void;
   unmount: UnmountFn;
 };
 
-export type Store<TState> = (
-  interpreters: MountedInterpreter[],
-) => MountedStore<TState>;
-
-export type StoreAction =
-  | InterpreterEvent
-  | { type: "tick"; timestamp: number };
+export type StoreAction = { type: "tick"; timestamp: number };
 
 /**
  * A pure function that computes the next private state from the current state and an action.
@@ -79,5 +74,5 @@ export type MountedRenderer = {
 
 export type Renderer<TState> = (
   element: Element,
-  store: MountedStore<TState>,
+  store: Store<TState>,
 ) => MountedRenderer;

@@ -6,7 +6,6 @@ export type {
   State,
   MountedInterpreter,
   Interpreter,
-  MountedStore,
   Store,
   MountedRenderer,
   Renderer,
@@ -26,4 +25,5 @@ export {
   createCarouselModel,
   type CarouselConfig,
   type CarouselPublicState,
+  type CarouselAction,
 } from "./model/index.js";
