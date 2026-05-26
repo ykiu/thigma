@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRenderer } from "../index.js";
-import type { MountedStore, Callback, State } from "../../types.js";
+import type { Store, Callback, State } from "../../types.js";
 
-function makeMockStore(): MountedStore<State> & { emit: (s: State) => void } {
+function makeMockStore(): Store<State> & { emit: (s: State) => void } {
   const callbacks = new Set<Callback<State>>();
   return {
     emit(s: State) {
@@ -13,7 +13,6 @@ function makeMockStore(): MountedStore<State> & { emit: (s: State) => void } {
       return () => callbacks.delete(cb);
     },
     dispatch: vi.fn(),
-    mount: vi.fn(() => vi.fn()),
     unmount: vi.fn(),
   };
 }

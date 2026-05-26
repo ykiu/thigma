@@ -6,7 +6,6 @@ export type {
   State,
   MountedInterpreter,
   Interpreter,
-  MountedStore,
   Store,
   MountedRenderer,
   Renderer,

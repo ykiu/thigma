@@ -1,6 +1,7 @@
-import type { InterpreterEvent, StoreAction, Model } from "../types.js";
+import type { Model } from "../types.js";
 import {
   type TransformPrivateState,
+  type TransformAction,
   createTransformReduce,
   settleTransform,
 } from "./transform.js";
@@ -29,7 +30,7 @@ export type CarouselPublicState = {
 };
 
 export type CarouselAction =
-  | StoreAction
+  | TransformAction
   | { type: "set-config"; config: CarouselConfig };
 
 // ---------------------------------------------------------------------------
@@ -66,7 +67,7 @@ export type CarouselPrivateState =
       activeItemId: string;
     };
 
-type MotionEvent = Extract<InterpreterEvent, { type: "motion" }>;
+type MotionEvent = Extract<TransformAction, { type: "motion" }>;
 
 // ---------------------------------------------------------------------------
 // Item bounds helper

@@ -14,9 +14,8 @@ import {
   mouseDragInterpreter,
   createStore,
   createCarouselModel,
-  type MountedStore,
+  type Store,
   type MountedInterpreter,
-  type InterpreterEvent,
   mouseWheelInterpreter,
   doubleTapInterpreter,
   type CarouselAction,
@@ -28,7 +27,7 @@ import {
 // ---------------------------------------------------------------------------
 
 type CarouselContextValue = {
-  store: MountedStore<CarouselPublicState, CarouselAction>;
+  store: Store<CarouselPublicState, CarouselAction>;
   itemWidth: number;
   itemHeight: number;
 };
@@ -45,9 +44,7 @@ function withItemId(
 ): MountedInterpreter {
   return {
     subscribe(cb) {
-      return interp.subscribe((event: InterpreterEvent) =>
-        cb({ ...event, itemId }),
-      );
+      return interp.subscribe((event) => cb({ ...event, itemId }));
     },
     unmount: () => interp.unmount(),
   };
@@ -84,7 +81,9 @@ export function ScalableCarouselItem({
       withItemId(doubleTapInterpreter()(viewport), id),
     ];
 
-    const unmounts = interpreters.map((interp) => store.mount(interp));
+    const unmounts = interpreters.map((interp) =>
+      interp.subscribe((e) => store.dispatch(e)),
+    );
     return () => {
       for (const unmount of unmounts) unmount();
       for (const interp of interpreters) interp.unmount();
@@ -150,7 +149,7 @@ export function ScalableCarouselContainer({
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
-  const [store, setStore] = useState<MountedStore<
+  const [store, setStore] = useState<Store<
     CarouselPublicState,
     CarouselAction
   > | null>(null);
@@ -173,7 +172,7 @@ export function ScalableCarouselContainer({
         itemHeight,
         itemIds: itemIdsRef.current,
       }),
-    )([]);
+    );
 
     setStore(s);
 

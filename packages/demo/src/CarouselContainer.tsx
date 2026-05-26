@@ -46,11 +46,15 @@ export function CarouselContainer({
           scale,
         }),
       }),
-    )(interpreters);
+    );
+    const stops = interpreters.map((i) =>
+      i.subscribe((e) => store.dispatch(e)),
+    );
     const renderer = createRenderer()(content, store);
 
     return () => {
       renderer.unmount();
+      for (const stop of stops) stop();
       store.unmount();
       for (const interp of interpreters) interp.unmount();
     };

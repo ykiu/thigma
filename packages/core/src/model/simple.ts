@@ -1,7 +1,8 @@
-import type { State, StoreAction, Model } from "../types.js";
+import type { State, Model } from "../types.js";
 import {
   type TransformPrivateState,
   type TransformConfig,
+  type TransformAction,
   createTransformReduce,
 } from "./transform.js";
 
@@ -17,6 +18,6 @@ function toPublicState(state: TransformPrivateState): State {
 
 export function createModel(
   config?: TransformConfig,
-): Model<State, TransformPrivateState, StoreAction> {
+): Model<State, TransformPrivateState, TransformAction> {
   return { reduce: createTransformReduce(config), publish: toPublicState };
 }
