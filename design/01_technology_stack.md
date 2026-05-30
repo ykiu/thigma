@@ -21,12 +21,17 @@ packages/
         mouse-wheel.ts
         double-tap.ts
         index.ts
+      model/
+        primitives.ts    # Transform, TransformVelocity, applyScalePivot, computeDtMs
+        transform.ts     # TransformPrivateState, createTransformReduce
+        simple.ts        # createModel
+        carousel.ts      # createCarouselModel
+        index.ts
       store/
-        primitives.ts    # LinearPrimitive, ExponentialPrimitive
         index.ts
       renderer/
         index.ts
-      types.ts           # Motion, State, and common primitive types
+      types.ts           # InterpreterEvent, State, and common primitive types
     package.json
     tsconfig.json
   demo/                  # @mimosa/demo

@@ -12,47 +12,38 @@ type UnmountFn = () => void;
 type Callback<T> = (value: T) => void;
 ```
 
-**Reducer** is the core abstraction for state machines in this library. A Reducer is a pure function that takes the current state and an action, and returns the next state:
+**Reducer** is the core abstraction for state machines in this library. A Reducer is a pure function that takes the current state and an action, and returns the next state. The first call passes `undefined` for state; the reducer must return an initial state in that case.
 
 ```typescript
-type Reducer<TState, TStoreAction> = (state: TState, action: TStoreAction) => TState;
-```
-
-Some reducers also return an optional output event alongside the new state (e.g. Interpreter reducers that emit an `InterpreterEvent`):
-
-```typescript
-// Variant used by Interpreters
-reduce(state, action) => { state: TState; event?: TOutputEvent }
+type Reducer<TPrivateState, TAction = StoreAction> = (
+  state: TPrivateState | undefined,
+  action: TAction,
+) => TPrivateState;
 ```
 
 **Model** is the top-level abstraction that bundles a reducer with a projection function. It encapsulates both the private state machine and the mapping to a public-facing state that consumers observe:
 
 ```typescript
-interface Model<TPublicState, TTransformPrivateState, TStoreAction> {
-  reduce: Reducer<TTransformPrivateState, TStoreAction>;
-  publish(state: TTransformPrivateState): TPublicState;
+interface Model<TPublicState, TPrivateState, TAction = StoreAction> {
+  reduce: Reducer<TPrivateState, TAction>;
+  publish(state: TPrivateState): TPublicState;
 }
 ```
 
-**Motion** is the motion payload used internally by the Store. It represents the relative change from the previous state. For pan gestures, use `dScale: 1` and `originX/Y: 0`.
-
-```typescript
-type Motion = {
-  dx: number;      // horizontal translation delta (px)
-  dy: number;      // vertical translation delta (px)
-  dScale: number;  // multiplicative scale factor (1.0 = no change, 1.1 = 10% zoom in)
-  originX: number; // scale origin X, relative to the element's top-left corner (px)
-  originY: number; // scale origin Y, relative to the element's top-left corner (px)
-};
-```
-
-**InterpreterEvent** is the output of an Interpreter. It is a tagged union that covers gesture movement, the moment the user releases the gesture, and discrete tap gestures.
+**InterpreterEvent** is the output of an Interpreter. It is a tagged union that covers gesture movement, the moment the user releases the gesture, and discrete tap gestures. The motion fields (`dx`, `dy`, `dScale`, `originX`, `originY`) are inlined directly into the `motion` variant. For pan-only gestures, `dScale` is `1` and `originX/Y` are `0`.
 
 ```typescript
 type InterpreterEvent =
-  | ({ type: 'motion'; itemId?: string; timestamp: number } & Motion)                                        // user is actively gesturing
-  | { type: 'release'; itemId?: string }                                                                      // user lifted all fingers / released the mouse button
-  | { type: 'toggle-zoom'; itemId?: string; originX: number; originY: number; timestamp: number };           // double-tap: zoom in if at normal scale, zoom out otherwise
+  | {
+      type: 'motion'; itemId?: string; timestamp: number;
+      dx: number;      // horizontal translation delta (px)
+      dy: number;      // vertical translation delta (px)
+      dScale: number;  // multiplicative scale factor (1.0 = no change, 1.1 = 10% zoom in)
+      originX: number; // scale origin X, relative to the element's top-left corner (px)
+      originY: number; // scale origin Y, relative to the element's top-left corner (px)
+    }
+  | { type: 'release'; itemId?: string }
+  | { type: 'toggle-zoom'; itemId?: string; originX: number; originY: number; timestamp: number };
 ```
 
 The optional `itemId` field identifies which item within a multi-item container (e.g. a carousel) the gesture targets. It is absent for container-level gestures such as swiping the carousel strip itself.
@@ -146,39 +137,76 @@ The Model module contains the pure state transition logic for transformations, e
 
 ### Pre-Built Models
 
-The Model module provides factory functions for several pre-built Models for common use cases such as single-item pinch-to-zoom and multi-item carousels.
+The Model module provides two factory functions for common use cases.
 
+#### Single-Item Transform Model (`createModel`)
 
-```typescript
-declare function createModel(options: { /* model-specific options */ }): Model<State, TransformPrivateState, TransformAction>;
-```
-
-#### Single-Item Transform Model
-
-A Model for single-item pinch-to-zoom and pan. Supports optional snapping.
+A Model for single-item pinch-to-zoom and pan.
 
 ```typescript
-type Options = {
-  x?: (value: number) => number;
-  y?: (value: number) => number;
+declare function createModel(config?: TransformConfig): Model<State, TransformPrivateState, TransformAction>;
+
+type TransformConfig = {
+  elementWidth?: number;
+  elementHeight?: number;
+  /**
+   * Constrains the element so its edges stay within the given coordinates.
+   * Also enforces a minimum scale so the element can always satisfy these constraints.
+   */
+  bounds?: { left?: number; right?: number; top?: number; bottom?: number };
+  snapTarget?: (state: { transform: Transform; velocity: TransformVelocity }) => TransformSnapTarget | null;
+  /** Scale factor to apply when zooming in via double-tap. Defaults to 2. */
+  toggleZoomScale?: number;
 };
 ```
 
-#### Multi-Item Carousel Model
-
-A Model for multi-item carousels that support per-item pinch-to-zoom. Its action type extends `StoreAction` with a `set-config` action that allows changing the item list at runtime:
+The private state is a tagged union:
 
 ```typescript
-type Options = {
-  itemWidth: number;   // item container width (px)
-  itemHeight: number;  // item container height (px)
-  itemIds: readonly string[];  // ordered list of item identifiers
+type TransformPrivateState =
+  | { type: "tracking"; transform: Transform; velocity: TransformVelocity; lastUpdatedAt: number; origin: { x: number; y: number } }
+  | { type: "inertia";  transform: Transform; velocity: TransformVelocity; lastUpdatedAt: number; origin: { x: number; y: number } }
+  | { type: "snapping"; transform: Transform; lastUpdatedAt: number; target: TransformSnapTarget }
+  | { type: "settled";  transform: Transform; lastUpdatedAt: number };
+```
+
+- **tracking** — the user is actively gesturing.
+- **inertia** — the user released and the element is coasting.
+- **snapping** — the element is spring-interpolating toward a snap target.
+- **settled** — no motion; the animation loop is paused.
+
+#### Multi-Item Carousel Model (`createCarouselModel`)
+
+A Model for multi-item carousels that support per-item pinch-to-zoom. Its action type extends `TransformAction` with a `set-config` action that allows changing the item list at runtime:
+
+```typescript
+declare function createCarouselModel(config: CarouselConfig): Model<CarouselPublicState, CarouselPrivateState, CarouselAction>;
+
+type CarouselConfig = {
+  itemWidth: number;            // item container width (px)
+  itemHeight: number;           // item container height (px)
+  itemIds: readonly string[];   // ordered list of item identifiers
 };
 
 type CarouselAction = TransformAction | { type: "set-config"; config: CarouselConfig };
 ```
 
 Dispatching `set-config` updates the item list while preserving carousel animation state. The carousel strip stays anchored to the item the gesture was heading toward; deleted items lose their transform state; new items start at the neutral transform. If the active item (currently being panned/zoomed) is deleted, the model transitions immediately to the `free` state.
+
+The private state is a tagged union that tracks whether a gesture is targeting the carousel strip or an individual item:
+
+```typescript
+type CarouselPrivateState =
+  | { type: "free";     itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
+  | { type: "carousel"; itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
+  | { type: "items";    itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string };
+```
+
+- **free** — no active gesture; animations may still be running on carousel or items.
+- **carousel** — gesture is scrolling the carousel strip.
+- **items** — gesture is targeting `activeItemId` for pan/zoom.
+
+Tick advances both carousel and items animations in every phase.
 
 #### Transform and TransformVelocity
 
@@ -215,9 +243,10 @@ declare function createStore<TPrivateState, TState, TExtraAction = never>(
 To create a transform store and wire up interpreters:
 
 ```typescript
-const store = createStore(createModel(snapConfig));
-const stops = interpreters.map(i => i.subscribe(e => store.dispatch(e)));
-// Later: stops.forEach(stop => stop()); store.unmount(); interpreters.forEach(i => i.unmount());
+const store = createStore(createModel(config));
+const mounted = interpreters.map(i => i(element));
+const stops = mounted.map(i => i.subscribe(e => store.dispatch(e)));
+// Later: stops.forEach(stop => stop()); store.unmount(); mounted.forEach(i => i.unmount());
 ```
 
 ## Renderer Module
@@ -227,12 +256,12 @@ The Renderer module receives transform information from the Store and applies it
 The Renderer subscribes to the Store and updates the target element's CSS transform whenever State changes. The Renderer holds no internal state and is responsible only for side effects (DOM updates).
 
 ```typescript
-type Renderer = (element: Element, store: Store) => MountedRenderer;
+type Renderer<TState> = (element: Element, store: Store<TState>) => MountedRenderer;
 type MountedRenderer = {
   unmount: UnmountFn;
 };
 
-declare function createRenderer(): Renderer;
+declare function createRenderer(): Renderer<State>;
 ```
 
 ## Module Dependencies
@@ -240,7 +269,7 @@ declare function createRenderer(): Renderer;
 - The Renderer depends on the Store. The Renderer subscribes to the Store's state and applies transformations to the target element.
 - The Store depends on the Model. The Store drives the animation loop and forwards externally dispatched actions to the Model.
 - The Model does not depend on the Store, Interpreter, or Renderer. It is a pure function from state and action to state.
-- The Interpreter does not depend on the Store, Model, or Renderer. The Interpreter focuses solely on processing user input and generating Motion.
+- The Interpreter does not depend on the Store, Model, or Renderer. The Interpreter focuses solely on processing user input and emitting InterpreterEvents.
 
 ## Testing Policy
 
