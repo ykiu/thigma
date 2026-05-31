@@ -130,11 +130,12 @@ function reduce(state: TouchState, action: TouchAction): ReducerResult {
           };
         }
       }
+      throw new Error("unreachable");
   }
 }
 
 export function touchInterpreter(): Interpreter {
-  return (element: Element): MountedInterpreter => {
+  return (element: HTMLElement): MountedInterpreter => {
     const callbacks = new Set<Callback<InterpreterEvent>>();
     let state: TouchState = { type: "no_touch" };
 
@@ -177,16 +178,16 @@ export function touchInterpreter(): Interpreter {
       });
     }
 
-    element.addEventListener("touchstart", onTouchStart as EventListener, {
+    element.addEventListener("touchstart", onTouchStart, {
       passive: true,
     });
-    element.addEventListener("touchmove", onTouchMove as EventListener, {
+    element.addEventListener("touchmove", onTouchMove, {
       passive: false,
     });
-    element.addEventListener("touchend", onTouchEnd as EventListener, {
+    element.addEventListener("touchend", onTouchEnd, {
       passive: true,
     });
-    element.addEventListener("touchcancel", onTouchCancel as EventListener, {
+    element.addEventListener("touchcancel", onTouchCancel, {
       passive: true,
     });
 
@@ -196,16 +197,10 @@ export function touchInterpreter(): Interpreter {
         return () => callbacks.delete(cb);
       },
       unmount() {
-        element.removeEventListener(
-          "touchstart",
-          onTouchStart as EventListener,
-        );
-        element.removeEventListener("touchmove", onTouchMove as EventListener);
-        element.removeEventListener("touchend", onTouchEnd as EventListener);
-        element.removeEventListener(
-          "touchcancel",
-          onTouchCancel as EventListener,
-        );
+        element.removeEventListener("touchstart", onTouchStart);
+        element.removeEventListener("touchmove", onTouchMove);
+        element.removeEventListener("touchend", onTouchEnd);
+        element.removeEventListener("touchcancel", onTouchCancel);
         callbacks.clear();
       },
     };

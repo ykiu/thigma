@@ -41,7 +41,7 @@ export type MountedInterpreter = {
   unmount: UnmountFn;
 };
 
-export type Interpreter = (element: Element) => MountedInterpreter;
+export type Interpreter = (element: HTMLElement) => MountedInterpreter;
 
 export type Store<TState, TAction = StoreAction> = {
   subscribe: (cb: Callback<TState>) => UnsubscribeFn;
