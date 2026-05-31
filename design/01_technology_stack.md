@@ -6,7 +6,8 @@ This project uses a monorepo structure to manage the library and the demo applic
 
 | Package | Role |
 |---------|------|
-| `@mimosa/core` | Library |
+| `@mimosa/core` | Framework-agnostic gesture library |
+| `@mimosa/react` | React component wrappers around `@mimosa/core` |
 | `@mimosa/demo` | Demo application for manual testing |
 
 ## Directory Structure
@@ -34,6 +35,14 @@ packages/
       types.ts           # InterpreterEvent, State, and common primitive types
     package.json
     tsconfig.json
+  react/                 # @mimosa/react
+    src/
+      PinchPanContainer.tsx
+      CarouselContainer.tsx
+      ScalableCarouselContainer.tsx
+      index.ts
+    package.json
+    tsconfig.json
   demo/                  # @mimosa/demo
     src/
     package.json
@@ -48,6 +57,8 @@ package.json             # workspace root
   - Vite
 - `@mimosa/core`
   - Vitest
+- `@mimosa/react`
+  - React (peer dependency)
 - `@mimosa/demo`
   - React
   - Tailwind CSS

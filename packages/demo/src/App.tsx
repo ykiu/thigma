@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { PinchPanContainer } from "./PinchPanContainer.js";
-import { CarouselContainer } from "./CarouselContainer.js";
 import {
+  touchInterpreter,
+  mouseDragInterpreter,
+  mouseWheelInterpreter,
+  doubleTapInterpreter,
+} from "@mimosa/core";
+import {
+  PinchPanContainer,
+  CarouselContainer,
   ScalableCarouselContainer,
   ScalableCarouselItem,
-} from "./ScalableCarouselContainer.js";
+} from "@mimosa/react";
 
 const IMAGE_URL = "https://picsum.photos/id/599/400/300";
 
@@ -25,6 +31,21 @@ const SCALABLE_CAROUSEL_ITEMS = [
   { id: "photo-3", photoId: "30" },
   { id: "photo-4", photoId: "40" },
   { id: "photo-5", photoId: "50" },
+];
+
+const pinchPanInterpreters = [
+  touchInterpreter(),
+  mouseDragInterpreter(),
+  mouseWheelInterpreter(),
+];
+
+const carouselInterpreters = [touchInterpreter(), mouseDragInterpreter()];
+
+const scalableItemInterpreters = [
+  touchInterpreter(),
+  mouseDragInterpreter(),
+  mouseWheelInterpreter(),
+  doubleTapInterpreter(),
 ];
 
 type Tab = "pinch-pan" | "carousel" | "scalable-carousel";
@@ -62,7 +83,10 @@ export function App() {
       </header>
 
       {tab === "pinch-pan" && (
-        <PinchPanContainer className="flex-1 w-full">
+        <PinchPanContainer
+          className="flex-1 w-full"
+          interpreters={pinchPanInterpreters}
+        >
           <img
             src={IMAGE_URL}
             alt="demo"
@@ -78,6 +102,7 @@ export function App() {
             itemCount={CAROUSEL_ITEMS.length}
             itemWidth={400}
             className="flex-1"
+            interpreters={carouselInterpreters}
           >
             {CAROUSEL_ITEMS.map(({ label, bg }) => (
               <div
@@ -102,7 +127,11 @@ export function App() {
             itemHeight={SCALABLE_CAROUSEL_ITEM_HEIGHT}
           >
             {SCALABLE_CAROUSEL_ITEMS.map(({ id, photoId }) => (
-              <ScalableCarouselItem key={id} id={id}>
+              <ScalableCarouselItem
+                key={id}
+                id={id}
+                interpreters={scalableItemInterpreters}
+              >
                 <img
                   src={`https://picsum.photos/id/${photoId}/${SCALABLE_CAROUSEL_ITEM_WIDTH}/${SCALABLE_CAROUSEL_ITEM_HEIGHT}`}
                   alt={id}
