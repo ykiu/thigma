@@ -47,6 +47,11 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
       state = model.reduce(state, action);
       resumeLoop();
     },
+    flush() {
+      lastEmittedState = state;
+      const publicState = model.publish(state);
+      for (const cb of callbacks) cb(publicState);
+    },
     unmount() {
       mounted = false;
       if (rafId !== null) cancelAnimationFrame(rafId);

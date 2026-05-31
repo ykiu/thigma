@@ -46,6 +46,7 @@ export type Interpreter = (element: HTMLElement) => MountedInterpreter;
 export type Store<TState, TAction = StoreAction> = {
   subscribe: (cb: Callback<TState>) => UnsubscribeFn;
   dispatch: (action: TAction) => void;
+  flush: () => void;
   unmount: UnmountFn;
 };
 
