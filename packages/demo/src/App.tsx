@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   touchInterpreter,
   mouseDragInterpreter,
@@ -52,6 +52,28 @@ type Tab = "pinch-pan" | "carousel" | "scalable-carousel";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("pinch-pan");
+  const [scalableItems, setScalableItems] = useState(SCALABLE_CAROUSEL_ITEMS);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const nextItemIdRef = useRef(SCALABLE_CAROUSEL_ITEMS.length);
+
+  function addItemAt(index: number) {
+    const n = nextItemIdRef.current++;
+    const newItem = {
+      id: `photo-added-${n}`,
+      photoId: String(Math.floor(Math.random() * 900) + 1),
+    };
+    setScalableItems((prev) => [
+      ...prev.slice(0, index),
+      newItem,
+      ...prev.slice(index),
+    ]);
+    setSelectedIndex(index);
+  }
+
+  function removeItemAt(index: number) {
+    setScalableItems((prev) => prev.filter((_, i) => i !== index));
+    setSelectedIndex(Math.max(0, Math.min(index, scalableItems.length - 2)));
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -126,7 +148,7 @@ export function App() {
             itemWidth={SCALABLE_CAROUSEL_ITEM_WIDTH}
             itemHeight={SCALABLE_CAROUSEL_ITEM_HEIGHT}
           >
-            {SCALABLE_CAROUSEL_ITEMS.map(({ id, photoId }) => (
+            {scalableItems.map(({ id, photoId }) => (
               <ScalableCarouselItem
                 key={id}
                 id={id}
@@ -147,9 +169,62 @@ export function App() {
               </ScalableCarouselItem>
             ))}
           </ScalableCarouselContainer>
-          <p className="text-center text-gray-500 text-sm py-2">
-            Drag or swipe to navigate · Pinch to zoom · Snaps back on release
-          </p>
+          <div className="flex items-center justify-center gap-4 text-sm py-2">
+            {scalableItems.length === 0 ? (
+              <button
+                type="button"
+                className="px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500"
+                onClick={() => addItemAt(0)}
+              >
+                Add Item
+              </button>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-gray-400">
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded hover:text-white disabled:opacity-30"
+                    disabled={selectedIndex === 0}
+                    onClick={() => setSelectedIndex((i) => i - 1)}
+                  >
+                    ←
+                  </button>
+                  <span>
+                    Item {selectedIndex + 1} of {scalableItems.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded hover:text-white disabled:opacity-30"
+                    disabled={selectedIndex === scalableItems.length - 1}
+                    onClick={() => setSelectedIndex((i) => i + 1)}
+                  >
+                    →
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500"
+                  onClick={() => addItemAt(selectedIndex)}
+                >
+                  Add Before
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500"
+                  onClick={() => addItemAt(selectedIndex + 1)}
+                >
+                  Add After
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1 rounded bg-rose-700 text-white hover:bg-rose-600"
+                  onClick={() => removeItemAt(selectedIndex)}
+                >
+                  Remove
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
