@@ -10,16 +10,13 @@ import {
   type ReactNode,
 } from "react";
 import {
-  touchInterpreter,
-  mouseDragInterpreter,
   createStore,
   createCarouselModel,
   type Store,
   type MountedInterpreter,
-  mouseWheelInterpreter,
-  doubleTapInterpreter,
   type CarouselAction,
   type CarouselPublicState,
+  type Interpreter,
 } from "@mimosa/core";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +32,7 @@ type CarouselContextValue = {
 const CarouselContext = createContext<CarouselContextValue | null>(null);
 
 // ---------------------------------------------------------------------------
-// withItemId — tags all events from an interpreter with an item ID
+// withItemId — tags all events from a mounted interpreter with an item ID
 // ---------------------------------------------------------------------------
 
 function withItemId(
@@ -57,40 +54,37 @@ function withItemId(
 type ScalableCarouselItemProps = {
   id: string;
   children?: ReactNode;
+  // Frozen at mount. To swap interpreters, remount via a key change.
+  interpreters: Interpreter[];
 };
 
 export function ScalableCarouselItem({
   id,
   children,
+  interpreters,
 }: ScalableCarouselItemProps) {
   const ctx = useContext(CarouselContext);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const interpretersRef = useRef(interpreters);
 
-  // Mount interpreters for this item.
   useEffect(() => {
     if (!ctx) return;
     const { store } = ctx;
     const viewport = viewportRef.current;
     if (!viewport) return;
 
-    const interpreters: MountedInterpreter[] = [
-      withItemId(touchInterpreter()(viewport), id),
-      withItemId(mouseDragInterpreter()(viewport), id),
-      withItemId(mouseWheelInterpreter()(viewport), id),
-      withItemId(doubleTapInterpreter()(viewport), id),
-    ];
-
-    const unmounts = interpreters.map((interp) =>
-      interp.subscribe((e) => store.dispatch(e)),
+    const mounted: MountedInterpreter[] = interpretersRef.current.map(
+      (interp) => withItemId(interp(viewport), id),
     );
+    const stops = mounted.map((m) => m.subscribe((e) => store.dispatch(e)));
+
     return () => {
-      for (const unmount of unmounts) unmount();
-      for (const interp of interpreters) interp.unmount();
+      for (const stop of stops) stop();
+      for (const m of mounted) m.unmount();
     };
   }, [ctx, id]);
 
-  // Subscribe to store and apply this item's transform.
   useEffect(() => {
     if (!ctx) return;
     return ctx.store.subscribe((state) => {
@@ -154,17 +148,12 @@ export function ScalableCarouselContainer({
     CarouselAction
   > | null>(null);
 
-  // Keep a ref to the latest itemIds so effects can read the current value
-  // without needing it in their dependency arrays (the array is a new reference
-  // every render even when content is unchanged).
   const itemIds = deriveItemIds(children);
   const itemIdsRef = useRef<readonly string[]>(itemIds);
   itemIdsRef.current = itemIds;
 
-  // Stable string key used as a dep to detect actual content changes.
   const itemIdsKey = itemIds.join(",");
 
-  // Create the store once per itemWidth/itemHeight.
   useEffect(() => {
     const s = createStore(
       createCarouselModel({
@@ -189,9 +178,6 @@ export function ScalableCarouselContainer({
     };
   }, [itemWidth, itemHeight]);
 
-  // Dispatch set-config whenever the item list changes after the store is ready.
-  // itemIdsKey is included as a trigger dep even though itemIdsRef.current is
-  // what's read inside — the ref is always current, the key signals the change.
   // biome-ignore lint/correctness/useExhaustiveDependencies: itemIdsKey is an intentional trigger dep for itemIdsRef.current
   useEffect(() => {
     if (!store) return;

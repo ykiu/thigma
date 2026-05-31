@@ -1,44 +1,46 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import {
-  touchInterpreter,
-  mouseDragInterpreter,
-  mouseWheelInterpreter,
   createStore,
   createRenderer,
   createModel,
+  type Interpreter,
+  type TransformConfig,
 } from "@mimosa/core";
 
 type Props = {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
+  // Frozen at mount. To swap interpreters, remount via a key change.
+  interpreters: Interpreter[];
+  modelOptions?: TransformConfig;
 };
 
-export function PinchPanContainer({ children, className }: Props) {
+export function PinchPanContainer({
+  children,
+  className,
+  interpreters,
+  modelOptions,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const interpretersRef = useRef(interpreters);
+  const modelOptionsRef = useRef(modelOptions);
 
   useEffect(() => {
     const container = containerRef.current;
     const content = contentRef.current;
     if (!container || !content) return;
 
-    const interpreters = [
-      touchInterpreter()(container),
-      mouseDragInterpreter()(container),
-      mouseWheelInterpreter()(container),
-    ];
-
-    const store = createStore(createModel());
-    const stops = interpreters.map((i) =>
-      i.subscribe((e) => store.dispatch(e)),
-    );
+    const mounted = interpretersRef.current.map((interp) => interp(container));
+    const store = createStore(createModel(modelOptionsRef.current));
+    const stops = mounted.map((m) => m.subscribe((e) => store.dispatch(e)));
     const renderer = createRenderer()(content, store);
 
     return () => {
       renderer.unmount();
       for (const stop of stops) stop();
       store.unmount();
-      for (const interp of interpreters) interp.unmount();
+      for (const m of mounted) m.unmount();
     };
   }, []);
 

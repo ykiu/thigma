@@ -1,17 +1,21 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import {
-  touchInterpreter,
-  mouseDragInterpreter,
   createStore,
   createRenderer,
   createModel,
+  type Interpreter,
+  type TransformConfig,
 } from "@mimosa/core";
 
 type Props = {
-  children: ReactNode;
+  children?: ReactNode;
   itemCount: number;
   itemWidth: number;
   className?: string;
+  // Frozen at mount. To swap interpreters, remount via a key change.
+  interpreters: Interpreter[];
+  // snapTarget in modelOptions overrides the default page-snap behaviour.
+  modelOptions?: TransformConfig;
 };
 
 export function CarouselContainer({
@@ -19,9 +23,14 @@ export function CarouselContainer({
   itemCount,
   itemWidth,
   className,
+  interpreters,
+  modelOptions,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const interpretersRef = useRef(interpreters);
+  const modelOptionsRef = useRef(modelOptions);
+  modelOptionsRef.current = modelOptions;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -34,10 +43,7 @@ export function CarouselContainer({
       return -clamped * itemWidth;
     };
 
-    const interpreters = [
-      touchInterpreter()(container),
-      mouseDragInterpreter()(container),
-    ];
+    const mounted = interpretersRef.current.map((interp) => interp(container));
     const store = createStore(
       createModel({
         snapTarget: ({ transform: { x, y, scale } }) => ({
@@ -45,18 +51,17 @@ export function CarouselContainer({
           y,
           scale,
         }),
+        ...modelOptionsRef.current,
       }),
     );
-    const stops = interpreters.map((i) =>
-      i.subscribe((e) => store.dispatch(e)),
-    );
+    const stops = mounted.map((m) => m.subscribe((e) => store.dispatch(e)));
     const renderer = createRenderer()(content, store);
 
     return () => {
       renderer.unmount();
       for (const stop of stops) stop();
       store.unmount();
-      for (const interp of interpreters) interp.unmount();
+      for (const m of mounted) m.unmount();
     };
   }, [itemCount, itemWidth]);
 

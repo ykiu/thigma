@@ -23,6 +23,7 @@ export { createRenderer } from "./renderer/index.js";
 export {
   createModel,
   createCarouselModel,
+  type TransformConfig,
   type CarouselConfig,
   type CarouselPublicState,
   type CarouselAction,
