@@ -13,6 +13,7 @@ function makeMockStore(): Store<State> & { emit: (s: State) => void } {
       return () => callbacks.delete(cb);
     },
     dispatch: vi.fn(),
+    flush: vi.fn(),
     unmount: vi.fn(),
   };
 }

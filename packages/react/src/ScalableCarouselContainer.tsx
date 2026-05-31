@@ -4,6 +4,7 @@ import {
   isValidElement,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -123,6 +124,7 @@ type Props = {
   children?: ReactNode;
   itemWidth: number;
   itemHeight: number;
+  selectedIndex?: number;
   className?: string;
 };
 
@@ -140,6 +142,7 @@ export function ScalableCarouselContainer({
   children,
   itemWidth,
   itemHeight,
+  selectedIndex,
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
@@ -186,6 +189,12 @@ export function ScalableCarouselContainer({
       config: { itemWidth, itemHeight, itemIds: itemIdsRef.current },
     });
   }, [store, itemWidth, itemHeight, itemIdsKey]);
+
+  useLayoutEffect(() => {
+    if (selectedIndex === undefined || !store) return;
+    store.dispatch({ type: "navigate-to", index: selectedIndex });
+    store.flush();
+  }, [store, selectedIndex]);
 
   const contextValue = useMemo(
     () => (store ? { store, itemWidth, itemHeight } : null),

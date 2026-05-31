@@ -31,7 +31,8 @@ export type CarouselPublicState = {
 
 export type CarouselAction =
   | TransformAction
-  | { type: "set-config"; config: CarouselConfig };
+  | { type: "set-config"; config: CarouselConfig }
+  | { type: "navigate-to"; index: number };
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -330,6 +331,20 @@ function createCarouselReduce(config: CarouselConfig) {
   ): CarouselPrivateState {
     if (action.type === "set-config") {
       return applySetConfig(state, action.config);
+    }
+
+    if (action.type === "navigate-to") {
+      const clampedIndex = Math.max(0, Math.min(itemCount - 1, action.index));
+      return {
+        type: "free",
+        itemIds: state.itemIds,
+        carousel: {
+          type: "settled",
+          transform: { x: -clampedIndex * itemWidth, y: 0, scale: 1 },
+          lastUpdatedAt: Number.NaN,
+        },
+        items: state.items,
+      };
     }
 
     switch (state.type) {

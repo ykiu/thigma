@@ -188,10 +188,15 @@ type CarouselConfig = {
   itemIds: readonly string[];   // ordered list of item identifiers
 };
 
-type CarouselAction = TransformAction | { type: "set-config"; config: CarouselConfig };
+type CarouselAction =
+  | TransformAction
+  | { type: "set-config"; config: CarouselConfig }
+  | { type: "navigate-to"; index: number };
 ```
 
 Dispatching `set-config` updates the item list while preserving carousel animation state. The carousel strip stays anchored to the item the gesture was heading toward; deleted items lose their transform state; new items start at the neutral transform. If the active item (currently being panned/zoomed) is deleted, the model transitions immediately to the `free` state.
+
+Dispatching `navigate-to` immediately moves the carousel strip to the given item index (clamped to the valid range), cancelling any in-progress gesture or animation. The model transitions to the `free` state.
 
 The private state is a tagged union that tracks whether a gesture is targeting the carousel strip or an individual item:
 
@@ -228,10 +233,14 @@ The Store has a continuous update loop driven by `requestAnimationFrame()`. The 
 
 The Store's update loop emits state to subscribers on every frame where the state changes. The loop pauses automatically when the reducer returns the same object reference as the previous state (indicating the state has settled), and resumes when `dispatch` is called. This pause/resume behavior is an implementation detail of the Store — other modules must not depend on it. The reference equality contract described in [State Machine Design](#state-machine-design) is what enables this optimization.
 
+`flush()` synchronously publishes the current state to all subscribers without waiting for the next animation frame. Use it when you need subscribers to reflect a `dispatch` call immediately — for example, to update the DOM before the browser paints.
+
 ```typescript
 type Store<TState, TAction = StoreAction> = {
   subscribe: (cb: Callback<TState>) => UnsubscribeFn;
   dispatch: (action: TAction) => void;
+  /** Synchronously fires all subscribers with the current public state. */
+  flush: () => void;
   unmount: UnmountFn;
 };
 
