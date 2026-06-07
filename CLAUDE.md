@@ -13,10 +13,17 @@ You can refer to the following documents as needed.
 
 When making changes to the codebase, follow this workflow:
 
-1. Plan your change.
-2. Ask for feedback on your plan.
-3. Add tests for your change and verify they fail.
-4. Implement your change.
-5. Run code quality checks
+1. Ask for clarification if the change is not clearly defined.
+2. Plan your change.
+3. Ask for feedback on your plan.
+4. Review the plan with the "typescript-review" skill and evaluate the feedback.
+5. Update documents as needed.
+6. Implement your change in a test-driven manner.
+7. Run code quality checks
    `npm run tsc && npm run format && npm run lint && npm run test`.
-6. Update documents as needed.
+8. Review your implementation with the "typescript-review" skill and evaluate the feedback.
+9. Iterate on your implementation based on feedback until finalized.
+
+## Human Language
+
+Always use English to write code comments, commit messages, documentation and GitHub PRs/issues/comments.
