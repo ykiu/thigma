@@ -231,6 +231,8 @@ export function createTransformReduce(config?: TransformConfig) {
             return state;
           case "toggle-zoom":
             return state;
+          case "slop":
+            return state;
         }
         throw new Error("unreachable");
       }
@@ -245,6 +247,8 @@ export function createTransformReduce(config?: TransformConfig) {
               lastUpdatedAt: state.lastUpdatedAt,
             };
           case "release":
+            return state;
+          case "slop":
             return state;
           case "tick": {
             const timestamp = action.timestamp;
@@ -331,6 +335,8 @@ export function createTransformReduce(config?: TransformConfig) {
             return state;
           case "toggle-zoom":
             return state;
+          case "slop":
+            return state;
           case "tick": {
             if (
               Math.abs(state.transform.x - state.target.x) < SNAP_THRESHOLD &&
@@ -380,6 +386,8 @@ export function createTransformReduce(config?: TransformConfig) {
           case "release":
             return state;
           case "tick":
+            return state;
+          case "slop":
             return state;
           case "toggle-zoom": {
             const target = computeToggleZoomTarget(

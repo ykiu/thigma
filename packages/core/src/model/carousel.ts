@@ -396,6 +396,8 @@ function createCarouselReduce(config: CarouselConfig) {
           }
           case "release":
             return state;
+          case "slop":
+            return state;
           case "toggle-zoom": {
             if (action.itemId === undefined) return state;
             const item = state.items[action.itemId];
@@ -451,6 +453,8 @@ function createCarouselReduce(config: CarouselConfig) {
           }
           case "toggle-zoom":
             return state;
+          case "slop":
+            return state;
           case "tick": {
             const carousel = carouselReduce(state.carousel, action);
             const items = advanceAllItems(state.items, action.timestamp);
@@ -492,6 +496,8 @@ function createCarouselReduce(config: CarouselConfig) {
               items,
             };
           }
+          case "slop":
+            return state;
           case "toggle-zoom": {
             if (action.itemId !== state.activeItemId) return state;
             return {

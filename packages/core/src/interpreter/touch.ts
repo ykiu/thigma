@@ -10,6 +10,7 @@ type TouchPoint = { x: number; y: number };
 
 type TouchState =
   | { type: "no_touch" }
+  | { type: "pending"; point: TouchPoint }
   | { type: "single_touch"; point: TouchPoint }
   | { type: "multi_touch"; points: [TouchPoint, TouchPoint] };
 
@@ -51,10 +52,42 @@ function reduce(state: TouchState, action: TouchAction): ReducerResult {
     case "no_touch":
       switch (action.type) {
         case "touchstart":
+          if (action.points.length === 1) {
+            return { state: { type: "pending", point: action.points[0] } };
+          }
+          return { state: stateFromPoints(action.points) };
         case "touchend":
         case "touchcancel":
         case "touchmove":
           return { state: stateFromPoints(action.points) };
+      }
+      throw new Error("unreachable");
+
+    case "pending":
+      switch (action.type) {
+        case "touchstart":
+          return { state: stateFromPoints(action.points) };
+        case "touchend":
+        case "touchcancel":
+          return { state: { type: "no_touch" }, event: { type: "release" } };
+        case "touchmove": {
+          if (action.points.length === 0) {
+            return { state: { type: "no_touch" } };
+          }
+          const curr = action.points[0];
+          return {
+            state: stateFromPoints(action.points),
+            event: {
+              type: "slop",
+              timestamp: action.timestamp,
+              dx: curr.x - state.point.x,
+              dy: curr.y - state.point.y,
+              dScale: 1,
+              originX: 0,
+              originY: 0,
+            },
+          };
+        }
       }
       throw new Error("unreachable");
 

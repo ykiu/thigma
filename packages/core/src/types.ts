@@ -15,6 +15,17 @@ export type InterpreterEvent =
       timestamp: number;
     }
   | {
+      type: "slop";
+      /** Identifies the item being interacted with. Absent for container-level gestures. */
+      itemId?: string;
+      dx: number;
+      dy: number;
+      dScale: number;
+      originX: number;
+      originY: number;
+      timestamp: number;
+    }
+  | {
       type: "release";
       /** Identifies the item being released. Absent for container-level gestures. */
       itemId?: string;
