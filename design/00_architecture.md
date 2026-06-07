@@ -30,7 +30,7 @@ interface Model<TPublicState, TPrivateState, TAction = StoreAction> {
 }
 ```
 
-**InterpreterEvent** is the output of an Interpreter. It is a tagged union that covers gesture movement, the moment the user releases the gesture, and discrete tap gestures. The motion fields (`dx`, `dy`, `dScale`, `originX`, `originY`) are inlined directly into the `motion` variant. For pan-only gestures, `dScale` is `1` and `originX/Y` are `0`.
+**InterpreterEvent** is the output of an Interpreter. It is a tagged union that covers gesture movement, the moment the user releases the gesture, and discrete tap gestures. The motion fields (`dx`, `dy`, `dScale`, `originX`, `originY`) are inlined directly into the `motion` and `slop` variants. For pan-only gestures, `dScale` is `1` and `originX/Y` are `0`.
 
 ```typescript
 type InterpreterEvent =
@@ -42,9 +42,15 @@ type InterpreterEvent =
       originX: number; // scale origin X, relative to the element's top-left corner (px)
       originY: number; // scale origin Y, relative to the element's top-left corner (px)
     }
+  | {
+      type: 'slop'; itemId?: string; timestamp: number;
+      dx: number; dy: number; dScale: number; originX: number; originY: number;
+    }
   | { type: 'release'; itemId?: string }
   | { type: 'toggle-zoom'; itemId?: string; originX: number; originY: number; timestamp: number };
 ```
+
+The `slop` variant carries the same fields as `motion` and represents the displacement between the initial `touchstart` position and the first `touchmove` position — the distance consumed by the browser's touch slop threshold. Models ignore `slop` (it does not move the element); it is available for gesture-direction detection.
 
 The optional `itemId` field identifies which item within a multi-item container (e.g. a carousel) the gesture targets. It is absent for container-level gestures such as swiping the carousel strip itself.
 
@@ -123,11 +129,11 @@ Implementation details:
 
 Each stateful interpreter models its internal state as a tagged union following the library-wide [State Machine Design](#state-machine-design) principles:
 
-- `touchInterpreter`: `no_touch | single_touch | multi_touch`
+- `touchInterpreter`: `no_touch | pending | single_touch | multi_touch`
 - `mouseDragInterpreter`: `idle | dragging`
 - `doubleTapInterpreter`: `idle | awaiting_second_tap`
 
-For example, a `single_touch` state necessarily carries exactly one touch point, and a `multi_touch` state necessarily carries exactly two. `touchInterpreter` can transition `no_touch → single_touch` and `single_touch → multi_touch`, but not `no_touch → multi_touch` directly.
+For example, a `single_touch` state necessarily carries exactly one touch point, and a `multi_touch` state necessarily carries exactly two. The `pending` state is entered when the first finger lands (`no_touch → pending`) and holds that initial touch point. The first `touchmove` from `pending` emits a `slop` event and transitions to `single_touch`; a second finger added during `pending` transitions directly to `multi_touch`. `touchInterpreter` can transition `no_touch → multi_touch` directly when the browser fires a `touchstart` with two simultaneous touches (e.g. mobile Safari).
 
 Each action corresponds to a DOM event. Side effects are confined to the thin `dispatch()` wrapper inside each interpreter factory, which calls `reduce`, updates the stored state, and emits the `InterpreterEvent` if one was returned.
 
