@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   touchInterpreter,
   mouseDragInterpreter,
@@ -30,14 +31,50 @@ export function ScalableCarouselDemo() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const nextItemIdRef = useRef(INITIAL_ITEMS.length);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const gridImgRefs = useRef(new Map<string, HTMLImageElement>());
+  const carouselImgRefs = useRef(new Map<string, HTMLImageElement>());
 
   function openModal(index: number) {
-    setSelectedIndex(index);
-    dialogRef.current?.showModal();
+    const { id } = items[index];
+    const gridImg = gridImgRefs.current.get(id);
+    const carouselImg = carouselImgRefs.current.get(id);
+
+    if (!document.startViewTransition) {
+      setSelectedIndex(index);
+      dialogRef.current?.showModal();
+      return;
+    }
+
+    gridImg?.style.setProperty("view-transition-name", "selected-photo");
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setSelectedIndex(index));
+      gridImg?.style.removeProperty("view-transition-name");
+      dialogRef.current?.showModal();
+      carouselImg?.style.setProperty("view-transition-name", "selected-photo");
+    });
+    transition.finished.then(() => {
+      carouselImg?.style.removeProperty("view-transition-name");
+    });
   }
 
   function closeModal() {
-    dialogRef.current?.close();
+    const { id } = items[selectedIndex];
+    const gridImg = gridImgRefs.current.get(id);
+    const carouselImg = carouselImgRefs.current.get(id);
+
+    if (!document.startViewTransition) {
+      dialogRef.current?.close();
+      return;
+    }
+    carouselImg?.style.setProperty("view-transition-name", "selected-photo");
+    const transition = document.startViewTransition(() => {
+      dialogRef.current?.close();
+      carouselImg?.style.removeProperty("view-transition-name");
+      gridImg?.style.setProperty("view-transition-name", "selected-photo");
+    });
+    transition.finished.then(() => {
+      gridImg?.style.removeProperty("view-transition-name");
+    });
   }
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
@@ -65,6 +102,16 @@ export function ScalableCarouselDemo() {
 
   return (
     <div className="flex-1 overflow-auto bg-gray-900 p-4">
+      <style>
+        {
+          `
+          ::view-transition-group(selected-photo) {
+            animation-duration: 5000ms;
+            animation-timing-function: ease-out;
+          }
+          `
+        }
+      </style>
       <div className="grid grid-cols-3 gap-2">
         {items.map(({ id, photoId }, index) => (
           <button
@@ -74,6 +121,10 @@ export function ScalableCarouselDemo() {
             onClick={() => openModal(index)}
           >
             <img
+              ref={(el) => {
+                if (el) gridImgRefs.current.set(id, el);
+                else gridImgRefs.current.delete(id);
+              }}
               src={`https://picsum.photos/id/${photoId}/300/300`}
               alt={id}
               draggable={false}
@@ -113,6 +164,10 @@ export function ScalableCarouselDemo() {
                   interpreters={interpreters}
                 >
                   <img
+                    ref={(el) => {
+                      if (el) carouselImgRefs.current.set(id, el);
+                      else carouselImgRefs.current.delete(id);
+                    }}
                     src={`https://picsum.photos/id/${photoId}/${ITEM_WIDTH}/${ITEM_HEIGHT}`}
                     alt={id}
                     draggable={false}
