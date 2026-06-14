@@ -108,8 +108,30 @@ export function ScalableCarouselDemo() {
       <style>
         {`
           ::view-transition-group(selected-photo) {
-            animation-duration: 5000ms;
-            animation-timing-function: ease-out;
+            animation-duration: 400ms;
+            animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+          }
+          ::view-transition-image-pair(selected-photo) {
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: block;
+          }
+          ::view-transition-old(selected-photo),
+          ::view-transition-new(selected-photo) {
+            opacity: 1 !important;
+            mix-blend-mode: normal !important;
+
+            // Place the image in the center of the container and make it cover the area, similar to object-fit: cover
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+
+            object-fit: cover;
           }
           `}
       </style>
