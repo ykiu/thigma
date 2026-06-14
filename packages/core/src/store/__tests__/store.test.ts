@@ -142,6 +142,22 @@ describe("createStore", () => {
     store.unmount();
   });
 
+  it("passes prevState on first emission equal to state, then the prior state on subsequent emissions", () => {
+    const store = createStore(counterModel((s) => s));
+    const pairs: Array<[CounterState, CounterState]> = [];
+    store.subscribe((s, prev) => pairs.push([s, prev]));
+
+    flushRaf();
+    expect(pairs[0][0]).toBe(pairs[0][1]); // first emission: state === prevState
+
+    store.dispatch(motionEvent);
+    flushRaf();
+    expect(pairs[1][0].motionCount).toBe(1);
+    expect(pairs[1][1].motionCount).toBe(0); // prevState is the prior emission
+
+    store.unmount();
+  });
+
   it("stops notifying after unmount", () => {
     const store = createStore(counterModel((s) => s));
     const snapshots: CounterState[] = [];

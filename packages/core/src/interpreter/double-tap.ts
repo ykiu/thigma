@@ -1,7 +1,7 @@
 import type {
   Interpreter,
   MountedInterpreter,
-  Callback,
+  InterpreterCallback,
   InterpreterEvent,
   UnsubscribeFn,
 } from "../types.js";
@@ -15,7 +15,7 @@ type DoubleTapState =
 
 export function doubleTapInterpreter(): Interpreter {
   return (element: Element): MountedInterpreter => {
-    const callbacks = new Set<Callback<InterpreterEvent>>();
+    const callbacks = new Set<InterpreterCallback<InterpreterEvent>>();
     let state: DoubleTapState = { type: "idle" };
 
     function emit(event: InterpreterEvent) {
@@ -86,7 +86,7 @@ export function doubleTapInterpreter(): Interpreter {
     });
 
     return {
-      subscribe(cb: Callback<InterpreterEvent>): UnsubscribeFn {
+      subscribe(cb: InterpreterCallback<InterpreterEvent>): UnsubscribeFn {
         callbacks.add(cb);
         return () => callbacks.delete(cb);
       },

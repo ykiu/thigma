@@ -1,7 +1,7 @@
 import type {
   Interpreter,
   MountedInterpreter,
-  Callback,
+  InterpreterCallback,
   InterpreterEvent,
   UnsubscribeFn,
 } from "../types.js";
@@ -169,7 +169,7 @@ function reduce(state: TouchState, action: TouchAction): ReducerResult {
 
 export function touchInterpreter(): Interpreter {
   return (element: HTMLElement): MountedInterpreter => {
-    const callbacks = new Set<Callback<InterpreterEvent>>();
+    const callbacks = new Set<InterpreterCallback<InterpreterEvent>>();
     let state: TouchState = { type: "no_touch" };
 
     function dispatch(action: TouchAction) {
@@ -225,7 +225,7 @@ export function touchInterpreter(): Interpreter {
     });
 
     return {
-      subscribe(cb: Callback<InterpreterEvent>): UnsubscribeFn {
+      subscribe(cb: InterpreterCallback<InterpreterEvent>): UnsubscribeFn {
         callbacks.add(cb);
         return () => callbacks.delete(cb);
       },

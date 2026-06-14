@@ -1,6 +1,6 @@
 import type {
   Store,
-  Callback,
+  StateCallback,
   UnsubscribeFn,
   Model,
   StoreAction,
@@ -9,9 +9,10 @@ import type {
 export function createStore<TPrivateState, TState, TExtraAction = never>(
   model: Model<TState, TPrivateState, StoreAction | TExtraAction>,
 ): Store<TState, StoreAction | TExtraAction> {
-  const callbacks = new Set<Callback<TState>>();
+  const callbacks = new Set<StateCallback<TState>>();
 
   let state = model.reduce(undefined, { type: "tick", timestamp: 0 });
+  let lastEmittedPublicState: TState = model.publish(state);
   let lastEmittedState: TPrivateState | undefined;
 
   let rafId: number | null = null;
@@ -26,7 +27,9 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
     }
     lastEmittedState = state;
     const publicState = model.publish(state);
-    for (const cb of callbacks) cb(publicState);
+    const prevPublicState = lastEmittedPublicState;
+    lastEmittedPublicState = publicState;
+    for (const cb of callbacks) cb(publicState, prevPublicState);
     rafId = requestAnimationFrame(loop);
   }
 
@@ -39,7 +42,7 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
   rafId = requestAnimationFrame(loop);
 
   return {
-    subscribe(cb: Callback<TState>): UnsubscribeFn {
+    subscribe(cb: StateCallback<TState>): UnsubscribeFn {
       callbacks.add(cb);
       return () => callbacks.delete(cb);
     },
@@ -48,9 +51,11 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
       resumeLoop();
     },
     flush() {
-      lastEmittedState = state;
       const publicState = model.publish(state);
-      for (const cb of callbacks) cb(publicState);
+      const prevPublicState = lastEmittedPublicState;
+      lastEmittedPublicState = publicState;
+      lastEmittedState = state;
+      for (const cb of callbacks) cb(publicState, prevPublicState);
     },
     unmount() {
       mounted = false;

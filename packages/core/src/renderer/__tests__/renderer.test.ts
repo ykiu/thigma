@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRenderer } from "../index.js";
-import type { Store, Callback, State } from "../../types.js";
+import type { Store, StateCallback, State } from "../../types.js";
 
 function makeMockStore(): Store<State> & { emit: (s: State) => void } {
-  const callbacks = new Set<Callback<State>>();
+  const callbacks = new Set<StateCallback<State>>();
   return {
     emit(s: State) {
-      for (const cb of callbacks) cb(s);
+      for (const cb of callbacks) cb(s, s);
     },
-    subscribe(cb: Callback<State>) {
+    subscribe(cb: StateCallback<State>) {
       callbacks.add(cb);
       return () => callbacks.delete(cb);
     },

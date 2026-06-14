@@ -28,11 +28,13 @@ const interpreters = [
 
 export function ScalableCarouselDemo() {
   const [items, setItems] = useState(INITIAL_ITEMS);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedItemId, setSelectedItemId] = useState(INITIAL_ITEMS[0].id);
   const nextItemIdRef = useRef(INITIAL_ITEMS.length);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const gridImgRefs = useRef(new Map<string, HTMLImageElement>());
   const carouselImgRefs = useRef(new Map<string, HTMLImageElement>());
+
+  const selectedIndex = items.findIndex((i) => i.id === selectedItemId);
 
   function openModal(index: number) {
     const { id } = items[index];
@@ -40,14 +42,14 @@ export function ScalableCarouselDemo() {
     const carouselImg = carouselImgRefs.current.get(id);
 
     if (!document.startViewTransition) {
-      setSelectedIndex(index);
+      setSelectedItemId(id);
       dialogRef.current?.showModal();
       return;
     }
 
     gridImg?.style.setProperty("view-transition-name", "selected-photo");
     const transition = document.startViewTransition(() => {
-      flushSync(() => setSelectedIndex(index));
+      flushSync(() => setSelectedItemId(id));
       gridImg?.style.removeProperty("view-transition-name");
       dialogRef.current?.showModal();
       carouselImg?.style.setProperty("view-transition-name", "selected-photo");
@@ -58,9 +60,8 @@ export function ScalableCarouselDemo() {
   }
 
   function closeModal() {
-    const { id } = items[selectedIndex];
-    const gridImg = gridImgRefs.current.get(id);
-    const carouselImg = carouselImgRefs.current.get(id);
+    const gridImg = gridImgRefs.current.get(selectedItemId);
+    const carouselImg = carouselImgRefs.current.get(selectedItemId);
 
     if (!document.startViewTransition) {
       dialogRef.current?.close();
@@ -92,25 +93,25 @@ export function ScalableCarouselDemo() {
       newItem,
       ...prev.slice(index),
     ]);
-    setSelectedIndex(index);
+    setSelectedItemId(newItem.id);
   }
 
   function removeItemAt(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
-    setSelectedIndex(Math.max(0, Math.min(index, items.length - 2)));
+    const newItems = items.filter((_, i) => i !== index);
+    const newIndex = Math.max(0, Math.min(index, newItems.length - 1));
+    setItems(newItems);
+    setSelectedItemId(newItems[newIndex]?.id ?? "");
   }
 
   return (
     <div className="flex-1 overflow-auto bg-gray-900 p-4">
       <style>
-        {
-          `
+        {`
           ::view-transition-group(selected-photo) {
             animation-duration: 5000ms;
             animation-timing-function: ease-out;
           }
-          `
-        }
+          `}
       </style>
       <div className="grid grid-cols-3 gap-2">
         {items.map(({ id, photoId }, index) => (
@@ -155,7 +156,8 @@ export function ScalableCarouselDemo() {
             <ScalableCarouselContainer
               itemWidth={ITEM_WIDTH}
               itemHeight={ITEM_HEIGHT}
-              selectedIndex={selectedIndex}
+              selectedItemId={selectedItemId}
+              onSelectedItemIdChange={setSelectedItemId}
             >
               {items.map(({ id, photoId }) => (
                 <ScalableCarouselItem
@@ -200,7 +202,9 @@ export function ScalableCarouselDemo() {
                     type="button"
                     className="px-2 py-1 rounded hover:text-white disabled:opacity-30"
                     disabled={selectedIndex === 0}
-                    onClick={() => setSelectedIndex((i) => i - 1)}
+                    onClick={() =>
+                      setSelectedItemId(items[selectedIndex - 1].id)
+                    }
                   >
                     ←
                   </button>
@@ -211,7 +215,9 @@ export function ScalableCarouselDemo() {
                     type="button"
                     className="px-2 py-1 rounded hover:text-white disabled:opacity-30"
                     disabled={selectedIndex === items.length - 1}
-                    onClick={() => setSelectedIndex((i) => i + 1)}
+                    onClick={() =>
+                      setSelectedItemId(items[selectedIndex + 1].id)
+                    }
                   >
                     →
                   </button>
