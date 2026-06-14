@@ -75,7 +75,7 @@ function computeMinScale(
   return minScale;
 }
 
-const SNAP_DECAY = 0.95; // per-frame interpolation factor toward snap target
+const SNAP_DECAY = 0.85; // per-frame interpolation factor toward snap target
 const SNAP_THRESHOLD = 0.5; // px
 const SCALE_SNAP_THRESHOLD = 0.001;
 const VELOCITY_THRESHOLD = 0.01; // px/ms
