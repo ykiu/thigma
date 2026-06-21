@@ -1,5 +1,4 @@
 /**
- * Transform represents the current position and scale of an element.
  * x, y, and scale are always updated together as an atomic unit — every
  * scale change also adjusts translation via applyScalePivot.
  */

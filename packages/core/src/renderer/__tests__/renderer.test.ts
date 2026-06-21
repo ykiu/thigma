@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRenderer } from "../index.js";
-import type { Store, StateCallback, State } from "../../types.js";
+import type { Store, StateCallback } from "../../types.js";
+import type { State } from "../../model/simple.js";
 
 function makeMockStore(): Store<State> & { emit: (s: State) => void } {
   const callbacks = new Set<StateCallback<State>>();

@@ -4,11 +4,20 @@ import {
   type CarouselPrivateState,
   type CarouselAction,
 } from "../carousel.js";
-import type { TransformPrivateState } from "../index.js";
+import type { BoundsConfig, TransformPrivateState } from "../transform.js";
 
 const ITEM_WIDTH = 400;
 const ITEM_HEIGHT = 600;
 const ITEM_IDS = ["a", "b", "c"] as const;
+
+const ITEM_BOUNDS: BoundsConfig = {
+  elementWidth: ITEM_WIDTH,
+  elementHeight: ITEM_HEIGHT,
+  left: 0,
+  right: ITEM_WIDTH,
+  top: 0,
+  bottom: ITEM_HEIGHT,
+};
 
 const DEFAULT_CONFIG = {
   itemWidth: ITEM_WIDTH,
@@ -35,7 +44,11 @@ function makeItemWithVelocity(x = 0, y = 0, scale = 1, vx = 0, logVScale = 0) {
 }
 
 function makeSettledItem(x = 0, y = 0, scale = 1): TransformPrivateState {
-  return { type: "settled", ...makeItemCore(x, y, scale, NaN) };
+  return {
+    type: "settled",
+    bounds: ITEM_BOUNDS,
+    ...makeItemCore(x, y, scale, NaN),
+  };
 }
 
 function makeInertiaItem(
@@ -46,6 +59,7 @@ function makeInertiaItem(
 ): TransformPrivateState {
   return {
     type: "inertia",
+    bounds: ITEM_BOUNDS,
     origin: { x: 0, y: 0 },
     ...makeItemWithVelocity(x, y, scale, vx),
   };
@@ -54,6 +68,7 @@ function makeInertiaItem(
 function makeTrackingItem(x = 0, y = 0, scale = 1): TransformPrivateState {
   return {
     type: "tracking",
+    bounds: ITEM_BOUNDS,
     origin: { x: 0, y: 0 },
     ...makeItemWithVelocity(x, y, scale),
   };
@@ -81,6 +96,8 @@ function free(
   }
   return {
     type: "free",
+    itemWidth: ITEM_WIDTH,
+    itemHeight: ITEM_HEIGHT,
     itemIds: ITEM_IDS,
     carousel: makeSettledCarousel(carouselX),
     items,
@@ -91,6 +108,8 @@ function free(
 function makeCarouselTrackingState(carouselX = 0): CarouselPrivateState {
   return {
     type: "carousel",
+    itemWidth: ITEM_WIDTH,
+    itemHeight: ITEM_HEIGHT,
     itemIds: ITEM_IDS,
     carousel: {
       type: "tracking",
@@ -117,6 +136,8 @@ function makeItemsState(
 ): CarouselPrivateState {
   return {
     type: "items",
+    itemWidth: ITEM_WIDTH,
+    itemHeight: ITEM_HEIGHT,
     itemIds: ITEM_IDS,
     carousel: makeSettledCarousel(),
     items: {
@@ -194,6 +215,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -298,6 +321,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const freeWithInertia: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -319,6 +344,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const freeWithInertia: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -386,6 +413,8 @@ describe("createCarouselModel", () => {
       // x=-100, velocity=-2 px/ms → projected ≈ -100 - 199 = -299 → snaps to -400
       const flickState: CarouselPrivateState = {
         type: "carousel",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: {
           type: "tracking",
@@ -412,6 +441,8 @@ describe("createCarouselModel", () => {
       // x=-300, velocity=+2 px/ms → projected ≈ -300 + 199 = -101 → snaps to 0
       const flickBackState: CarouselPrivateState = {
         type: "carousel",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: {
           type: "tracking",
@@ -458,6 +489,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state: CarouselPrivateState = {
         type: "carousel",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: {
           type: "tracking",
@@ -483,6 +516,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const freeWithInertia: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -576,11 +611,14 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const itemsWithVelocity: CarouselPrivateState = {
         type: "items",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
           a: {
             type: "tracking",
+            bounds: ITEM_BOUNDS,
             origin: { x: 0, y: 0 },
             ...makeItemWithVelocity(-50, 0, 2, -5),
           },
@@ -607,6 +645,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state: CarouselPrivateState = {
         type: "items",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: {
           type: "snapping",
@@ -636,6 +676,8 @@ describe("createCarouselModel", () => {
     function makeSettledCarouselWithInertiaItem(): CarouselPrivateState {
       return {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -679,6 +721,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -696,6 +740,8 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -719,6 +765,8 @@ describe("createCarouselModel", () => {
     function makeSnappingItemState(): CarouselPrivateState {
       return {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -768,6 +816,8 @@ describe("createCarouselModel", () => {
     ): CarouselPrivateState {
       return {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: {
           type: "snapping",
@@ -925,6 +975,8 @@ describe("createCarouselModel", () => {
       // item "a" is settled and zoomed in; toggle-zoom should snap it back out
       const itemsWithSettledItem: CarouselPrivateState = {
         type: "items",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -944,6 +996,8 @@ describe("createCarouselModel", () => {
       // item "a" is settled and zoomed in
       const before: CarouselPrivateState = {
         type: "items",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: makeSettledCarousel(),
         items: {
@@ -1017,6 +1071,8 @@ describe("createCarouselModel", () => {
       // Carousel snapping toward item "b" (index 1, x=-400). Delete "a" → "b" moves to index 0.
       const snapping: CarouselPrivateState = {
         type: "free",
+        itemWidth: ITEM_WIDTH,
+        itemHeight: ITEM_HEIGHT,
         itemIds: ITEM_IDS,
         carousel: {
           type: "snapping",
@@ -1064,6 +1120,31 @@ describe("createCarouselModel", () => {
       const reduce = makeReduce();
       const state = reduce(free(-2 * ITEM_WIDTH), setConfig(["a", "b"]));
       expect(state.carousel.transform.x).toBeCloseTo(-ITEM_WIDTH);
+    });
+
+    it("updates itemWidth and itemHeight in state", () => {
+      const reduce = makeReduce();
+      const state = reduce(free(), {
+        type: "set-config",
+        config: { itemWidth: 300, itemHeight: 500, itemIds: ITEM_IDS },
+      });
+      expect(state.itemWidth).toBe(300);
+      expect(state.itemHeight).toBe(500);
+    });
+
+    it("navigate-to uses updated itemWidth after dimensions change", () => {
+      const reduce = makeReduce();
+      const newWidth = 300;
+      let state = reduce(free(), {
+        type: "set-config",
+        config: {
+          itemWidth: newWidth,
+          itemHeight: ITEM_HEIGHT,
+          itemIds: ITEM_IDS,
+        },
+      });
+      state = reduce(state, { type: "navigate-to", index: 1 });
+      expect(state.carousel.transform.x).toBe(-newWidth);
     });
   });
 

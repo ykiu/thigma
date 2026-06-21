@@ -157,6 +157,12 @@ export function ScalableCarouselContainer({
   const itemIdsRef = useRef<readonly string[]>(itemIds);
   itemIdsRef.current = itemIds;
 
+  const itemWidthRef = useRef(itemWidth);
+  itemWidthRef.current = itemWidth;
+
+  const itemHeightRef = useRef(itemHeight);
+  itemHeightRef.current = itemHeight;
+
   const onSelectedItemIdChangeRef = useRef(onSelectedItemIdChange);
   onSelectedItemIdChangeRef.current = onSelectedItemIdChange;
 
@@ -165,8 +171,8 @@ export function ScalableCarouselContainer({
   useEffect(() => {
     const s = createStore(
       createCarouselModel({
-        itemWidth,
-        itemHeight,
+        itemWidth: itemWidthRef.current,
+        itemHeight: itemHeightRef.current,
         itemIds: itemIdsRef.current,
       }),
     );
@@ -178,7 +184,9 @@ export function ScalableCarouselContainer({
         stripRef.current.style.transform = `translateX(${state.carouselTranslateX}px)`;
       }
       if (state.isCarouselSettled && !prevState.isCarouselSettled) {
-        const index = Math.round(-state.carouselTranslateX / itemWidth);
+        const index = Math.round(
+          -state.carouselTranslateX / itemWidthRef.current,
+        );
         const clamped = Math.max(
           0,
           Math.min(itemIdsRef.current.length - 1, index),
@@ -191,16 +199,19 @@ export function ScalableCarouselContainer({
     return () => {
       unsubscribe();
       s.unmount();
-      setStore(null);
     };
-  }, [itemWidth, itemHeight]);
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: itemIdsKey is an intentional trigger dep for itemIdsRef.current
   useEffect(() => {
     if (!store) return;
     store.dispatch({
       type: "set-config",
-      config: { itemWidth, itemHeight, itemIds: itemIdsRef.current },
+      config: {
+        itemWidth: itemWidthRef.current,
+        itemHeight: itemHeightRef.current,
+        itemIds: itemIdsRef.current,
+      },
     });
   }, [store, itemWidth, itemHeight, itemIdsKey]);
 

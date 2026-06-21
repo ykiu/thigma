@@ -1,4 +1,4 @@
-import type { State, Model } from "../types.js";
+import type { Model } from "../types.js";
 import {
   type TransformPrivateState,
   type TransformConfig,
@@ -6,7 +6,11 @@ import {
   createTransformReduce,
 } from "./transform.js";
 
-export type { TransformPrivateState, TransformConfig };
+export type State = {
+  transformX: number;
+  transformY: number;
+  scale: number;
+};
 
 function toPublicState(state: TransformPrivateState): State {
   return {

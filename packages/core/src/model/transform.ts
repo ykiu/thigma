@@ -1,6 +1,10 @@
 import type { InterpreterEvent, StoreAction } from "../types.js";
 
-export type TransformAction = InterpreterEvent | StoreAction;
+export type TransformAction =
+  | InterpreterEvent
+  | StoreAction
+  | { type: "set-bounds"; bounds: BoundsConfig | undefined };
+
 import {
   type Transform,
   type TransformVelocity,
@@ -10,21 +14,22 @@ import {
 
 export type TransformSnapTarget = { x: number; y: number; scale: number };
 
+/**
+ * Constrains the element so its edges stay within the given coordinates.
+ * - `left`/`top`: element's left/top edge must be ≤ this value (maxima)
+ * - `right`/`bottom`: element's right/bottom edge must be ≥ this value (minima)
+ * Also enforces a minimum scale so the element can always satisfy these constraints.
+ */
+export type BoundsConfig = {
+  elementWidth: number;
+  elementHeight: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+};
+
 export type TransformConfig = {
-  elementWidth?: number;
-  elementHeight?: number;
-  /**
-   * Constrains the element so its edges stay within the given coordinates.
-   * - `left`/`top`: element's left/top edge must be ≤ this value (maxima)
-   * - `right`/`bottom`: element's right/bottom edge must be ≥ this value (minima)
-   * Also enforces a minimum scale so the element can always satisfy these constraints.
-   */
-  bounds?: {
-    left?: number;
-    right?: number;
-    top?: number;
-    bottom?: number;
-  };
   snapTarget?: (state: {
     transform: Transform;
     velocity: TransformVelocity;
@@ -38,6 +43,7 @@ type Origin = { x: number; y: number };
 export type TransformPrivateState =
   | {
       type: "tracking";
+      bounds?: BoundsConfig;
       transform: Transform;
       velocity: TransformVelocity;
       lastUpdatedAt: number;
@@ -45,6 +51,7 @@ export type TransformPrivateState =
     }
   | {
       type: "inertia";
+      bounds?: BoundsConfig;
       transform: Transform;
       velocity: TransformVelocity;
       lastUpdatedAt: number;
@@ -52,21 +59,20 @@ export type TransformPrivateState =
     }
   | {
       type: "snapping";
+      bounds?: BoundsConfig;
       transform: Transform;
       lastUpdatedAt: number;
       target: TransformSnapTarget;
     }
   | {
       type: "settled";
+      bounds?: BoundsConfig;
       transform: Transform;
       lastUpdatedAt: number;
     };
 
-function computeMinScale(
-  bounds: NonNullable<TransformConfig["bounds"]>,
-  elementWidth: number,
-  elementHeight: number,
-): number {
+function computeMinScale(bounds: BoundsConfig): number {
+  const { elementWidth, elementHeight } = bounds;
   let minScale = 0;
   if (bounds.right != null && elementWidth > 0)
     minScale = Math.max(minScale, bounds.right / elementWidth);
@@ -84,31 +90,29 @@ const TRANSLATE_INERTIA_DECAY = 0.99; // fraction of velocity retained per ms
 const SCALE_LOG_INERTIA_DECAY = 0.98; // fraction of log-velocity retained per ms
 
 export function settleTransform(state: {
+  bounds?: BoundsConfig;
   transform: Transform;
   lastUpdatedAt: number;
 }): Extract<TransformPrivateState, { type: "settled" }> {
   return {
     type: "settled",
+    bounds: state.bounds,
     transform: state.transform,
     lastUpdatedAt: state.lastUpdatedAt,
   };
 }
 
 export function createTransformReduce(config?: TransformConfig) {
-  const {
-    bounds,
-    snapTarget,
-    toggleZoomScale = 2,
-    elementWidth = 0,
-    elementHeight = 0,
-  } = config ?? {};
+  const { snapTarget, toggleZoomScale = 2 } = config ?? {};
 
   function clampPosition(
+    bounds: BoundsConfig | undefined,
     scale: number,
     x: number,
     y: number,
   ): { x: number; y: number } {
     if (!bounds) return { x, y };
+    const { elementWidth, elementHeight } = bounds;
     return {
       x: Math.max(
         bounds.right != null ? bounds.right - elementWidth * scale : -Infinity,
@@ -124,7 +128,7 @@ export function createTransformReduce(config?: TransformConfig) {
   }
 
   function computeToggleZoomTarget(
-    state: { transform: Transform },
+    state: { bounds?: BoundsConfig; transform: Transform },
     originX: number,
     originY: number,
   ): TransformSnapTarget {
@@ -137,6 +141,7 @@ export function createTransformReduce(config?: TransformConfig) {
         originY,
       );
       ({ x: targetX, y: targetY } = clampPosition(
+        state.bounds,
         toggleZoomScale,
         targetX,
         targetY,
@@ -154,6 +159,10 @@ export function createTransformReduce(config?: TransformConfig) {
     },
     action: TransformAction,
   ): TransformPrivateState {
+    if (action.type === "set-bounds") {
+      return { ...state, bounds: action.bounds };
+    }
+
     switch (state.type) {
       case "tracking": {
         switch (action.type) {
@@ -162,12 +171,9 @@ export function createTransformReduce(config?: TransformConfig) {
 
             // Clamp dScale so scale cannot go below the minimum required by bounds.
             let effectiveDScale = dScale;
+            const { bounds } = state;
             if (bounds) {
-              const minScale = computeMinScale(
-                bounds,
-                elementWidth,
-                elementHeight,
-              );
+              const minScale = computeMinScale(bounds);
               effectiveDScale = Math.max(
                 dScale,
                 minScale / state.transform.scale,
@@ -175,8 +181,7 @@ export function createTransformReduce(config?: TransformConfig) {
             }
             const newScale = state.transform.scale * effectiveDScale;
 
-            // Velocity tracks pan-only contribution so that the inertia tick can
-            // handle the scale-pivot effect separately without double-counting.
+            // Pan-only velocity avoids double-counting the scale-pivot effect in the inertia tick.
             const dtMs = computeDtMs(state.lastUpdatedAt, timestamp);
             const pivoted = applyScalePivot(
               state.transform,
@@ -188,6 +193,7 @@ export function createTransformReduce(config?: TransformConfig) {
             const proposedY = pivoted.y + dy;
 
             const { x: clampedX, y: clampedY } = clampPosition(
+              bounds,
               newScale,
               proposedX,
               proposedY,
@@ -195,6 +201,7 @@ export function createTransformReduce(config?: TransformConfig) {
 
             return {
               type: "tracking",
+              bounds: state.bounds,
               origin: { x: originX, y: originY },
               transform: { x: clampedX, y: clampedY, scale: newScale },
               velocity: {
@@ -214,6 +221,7 @@ export function createTransformReduce(config?: TransformConfig) {
               if (target)
                 return {
                   type: "snapping",
+                  bounds: state.bounds,
                   transform: state.transform,
                   lastUpdatedAt: state.lastUpdatedAt,
                   target,
@@ -221,6 +229,7 @@ export function createTransformReduce(config?: TransformConfig) {
             }
             return {
               type: "inertia",
+              bounds: state.bounds,
               transform: state.transform,
               velocity: state.velocity,
               lastUpdatedAt: state.lastUpdatedAt,
@@ -241,6 +250,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
+              bounds: state.bounds,
               origin: state.origin,
               transform: state.transform,
               velocity: state.velocity,
@@ -268,12 +278,9 @@ export function createTransformReduce(config?: TransformConfig) {
             let newScale =
               state.transform.scale * Math.exp(newLogVScale * dtMs);
 
+            const { bounds } = state;
             if (bounds) {
-              const minScale = computeMinScale(
-                bounds,
-                elementWidth,
-                elementHeight,
-              );
+              const minScale = computeMinScale(bounds);
               if (newScale < minScale) {
                 newScale = minScale;
                 newLogVScale = 0;
@@ -293,6 +300,7 @@ export function createTransformReduce(config?: TransformConfig) {
               state.origin.y,
             );
             const clamped = clampPosition(
+              bounds,
               newScale,
               pivoted.x + newVx * dtMs,
               pivoted.y + newVy * dtMs,
@@ -313,6 +321,7 @@ export function createTransformReduce(config?: TransformConfig) {
             );
             return {
               type: "snapping",
+              bounds: state.bounds,
               transform: state.transform,
               lastUpdatedAt: state.lastUpdatedAt,
               target,
@@ -326,6 +335,7 @@ export function createTransformReduce(config?: TransformConfig) {
           case "motion":
             return {
               type: "tracking",
+              bounds: state.bounds,
               origin: { x: 0, y: 0 },
               transform: state.transform,
               velocity: { vx: 0, vy: 0, logVScale: 0 },
@@ -346,6 +356,7 @@ export function createTransformReduce(config?: TransformConfig) {
             ) {
               return {
                 type: "settled",
+                bounds: state.bounds,
                 transform: state.target,
                 lastUpdatedAt: action.timestamp,
               };
@@ -376,6 +387,7 @@ export function createTransformReduce(config?: TransformConfig) {
             return reduce(
               {
                 type: "tracking",
+                bounds: state.bounds,
                 origin: { x: 0, y: 0 },
                 transform: state.transform,
                 velocity: { vx: 0, vy: 0, logVScale: 0 },
@@ -397,6 +409,7 @@ export function createTransformReduce(config?: TransformConfig) {
             );
             return {
               type: "snapping",
+              bounds: state.bounds,
               transform: state.transform,
               lastUpdatedAt: state.lastUpdatedAt,
               target,

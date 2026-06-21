@@ -2,6 +2,7 @@ import type { Model } from "../types.js";
 import {
   type TransformPrivateState,
   type TransformAction,
+  type BoundsConfig,
   createTransformReduce,
   settleTransform,
 } from "./transform.js";
@@ -32,7 +33,7 @@ export type CarouselPublicState = {
 };
 
 export type CarouselAction =
-  | TransformAction
+  | Exclude<TransformAction, { type: "set-bounds" }>
   | { type: "set-config"; config: CarouselConfig }
   | { type: "navigate-to"; index: number };
 
@@ -40,30 +41,27 @@ export type CarouselAction =
 // Internal types
 // ---------------------------------------------------------------------------
 
-/**
- * Carousel-level phase.
- *
- *   free          — no active gesture; animations may still be running.
- *   carousel      — gesture is scrolling the carousel strip.
- *   items         — gesture is targeting activeItemId for pan/zoom.
- *
- * tick advances both carousel and items animations in every phase.
- */
 export type CarouselPrivateState =
   | {
       type: "free";
+      itemWidth: number;
+      itemHeight: number;
       itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
   | {
       type: "carousel";
+      itemWidth: number;
+      itemHeight: number;
       itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
     }
   | {
       type: "items";
+      itemWidth: number;
+      itemHeight: number;
       itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
@@ -143,33 +141,29 @@ export function createCarouselModel(
 function createCarouselReduce(config: CarouselConfig) {
   const { itemWidth, itemHeight, itemIds } = config;
 
-  // Mutable item count so the snap-target closure always uses the latest value.
-  let itemCount = itemIds.length;
+  // Both reducers are stable constants — no closure state. Bounds live in
+  // each item's TransformPrivateState and are updated via "set-bounds".
+  const itemReduce = createTransformReduce();
+  const carouselReduce = createTransformReduce();
 
-  const itemReduce = createTransformReduce({
-    elementWidth: itemWidth,
-    elementHeight: itemHeight,
-    bounds: { left: 0, right: itemWidth, top: 0, bottom: itemHeight },
-  });
-
-  const carouselReduce = createTransformReduce({
-    snapTarget: ({ transform, velocity }) => ({
-      x: computeCarouselSnapTarget(
-        transform.x,
-        velocity.vx,
-        itemWidth,
-        itemCount,
-      ),
-      y: 0,
-      scale: 1,
-    }),
-  });
+  function makeItemBounds(w: number, h: number): BoundsConfig {
+    return {
+      elementWidth: w,
+      elementHeight: h,
+      left: 0,
+      right: w,
+      top: 0,
+      bottom: h,
+    };
+  }
 
   function makeInitialItems(): Record<string, TransformPrivateState> {
+    const bounds = makeItemBounds(itemWidth, itemHeight);
     const items: Record<string, TransformPrivateState> = {};
     for (const id of itemIds) {
       items[id] = {
         type: "settled",
+        bounds,
         transform: { x: 0, y: 0, scale: 1 },
         lastUpdatedAt: NaN,
       };
@@ -251,9 +245,14 @@ function createCarouselReduce(config: CarouselConfig) {
     state: CarouselPrivateState,
     newConfig: CarouselConfig,
   ): CarouselPrivateState {
-    const newItemIds = newConfig.itemIds;
+    const { itemWidth: oldItemWidth } = state;
+    const {
+      itemWidth: newItemWidth,
+      itemHeight: newItemHeight,
+      itemIds: newItemIds,
+    } = newConfig;
 
-    // Find the item the carousel is heading toward in the current list.
+    // Find the item the carousel is heading toward in the current (old) layout.
     const carousel = state.carousel;
     let anchorTargetX: number;
     if (carousel.type === "snapping") {
@@ -266,7 +265,7 @@ function createCarouselReduce(config: CarouselConfig) {
       anchorTargetX = computeCarouselSnapTarget(
         carousel.transform.x,
         vx,
-        itemWidth,
+        oldItemWidth,
         state.itemIds.length,
       );
     }
@@ -274,7 +273,7 @@ function createCarouselReduce(config: CarouselConfig) {
       0,
       Math.min(
         state.itemIds.length - 1,
-        Math.round(-anchorTargetX / itemWidth),
+        Math.round(-anchorTargetX / oldItemWidth),
       ),
     );
     const anchorId = state.itemIds[oldAnchorIndex];
@@ -288,26 +287,40 @@ function createCarouselReduce(config: CarouselConfig) {
       );
     }
 
-    const delta = (oldAnchorIndex - newAnchorIndex) * itemWidth;
+    const delta = (oldAnchorIndex - newAnchorIndex) * newItemWidth;
     const minX =
-      newItemIds.length > 0 ? -(newItemIds.length - 1) * itemWidth : 0;
+      newItemIds.length > 0 ? -(newItemIds.length - 1) * newItemWidth : 0;
     const newCarousel = shiftCarouselTransform(carousel, delta, minX);
+
+    const dimensionsChanged =
+      newItemWidth !== oldItemWidth || newItemHeight !== state.itemHeight;
+    const newBounds = dimensionsChanged
+      ? makeItemBounds(newItemWidth, newItemHeight)
+      : undefined;
 
     const newItems: Record<string, TransformPrivateState> = {};
     for (const id of newItemIds) {
-      newItems[id] = state.items[id] ?? {
-        type: "settled",
-        transform: { x: 0, y: 0, scale: 1 },
-        lastUpdatedAt: NaN,
-      };
+      const existing = state.items[id];
+      if (existing) {
+        newItems[id] =
+          newBounds !== undefined
+            ? itemReduce(existing, { type: "set-bounds", bounds: newBounds })
+            : existing;
+      } else {
+        newItems[id] = {
+          type: "settled",
+          bounds: newBounds ?? makeItemBounds(newItemWidth, newItemHeight),
+          transform: { x: 0, y: 0, scale: 1 },
+          lastUpdatedAt: NaN,
+        };
+      }
     }
-
-    // Update the mutable count so the snap-target closure stays current.
-    itemCount = newItemIds.length;
 
     if (state.type === "items" && !newItemIds.includes(state.activeItemId)) {
       return {
         type: "free",
+        itemWidth: newItemWidth,
+        itemHeight: newItemHeight,
         itemIds: newItemIds,
         carousel: newCarousel,
         items: newItems,
@@ -316,6 +329,8 @@ function createCarouselReduce(config: CarouselConfig) {
 
     return {
       ...state,
+      itemWidth: newItemWidth,
+      itemHeight: newItemHeight,
       itemIds: newItemIds,
       carousel: newCarousel,
       items: newItems,
@@ -325,6 +340,8 @@ function createCarouselReduce(config: CarouselConfig) {
   return function reduce(
     state: CarouselPrivateState | undefined = {
       type: "free",
+      itemWidth,
+      itemHeight,
       itemIds,
       carousel: {
         type: "settled",
@@ -340,13 +357,18 @@ function createCarouselReduce(config: CarouselConfig) {
     }
 
     if (action.type === "navigate-to") {
-      const clampedIndex = Math.max(0, Math.min(itemCount - 1, action.index));
+      const clampedIndex = Math.max(
+        0,
+        Math.min(state.itemIds.length - 1, action.index),
+      );
       return {
         type: "free",
+        itemWidth: state.itemWidth,
+        itemHeight: state.itemHeight,
         itemIds: state.itemIds,
         carousel: {
           type: "settled",
-          transform: { x: -clampedIndex * itemWidth, y: 0, scale: 1 },
+          transform: { x: -clampedIndex * state.itemWidth, y: 0, scale: 1 },
           lastUpdatedAt: Number.NaN,
         },
         items: state.items,
@@ -370,11 +392,13 @@ function createCarouselReduce(config: CarouselConfig) {
                       isZoomed &&
                       !isInMotion &&
                       action.dScale === 1 &&
-                      isHorizontalOverscroll(item, action.dx, itemWidth);
+                      isHorizontalOverscroll(item, action.dx, state.itemWidth);
                     if (!overscroll) {
                       // Lock to item
                       return {
                         type: "items",
+                        itemWidth: state.itemWidth,
+                        itemHeight: state.itemHeight,
                         itemIds: state.itemIds,
                         carousel: state.carousel,
                         items: lockItems(state.items, action.itemId, action),
@@ -395,6 +419,8 @@ function createCarouselReduce(config: CarouselConfig) {
             const carousel = carouselReduce(state.carousel, normalizedAction);
             return {
               type: "carousel",
+              itemWidth: state.itemWidth,
+              itemHeight: state.itemHeight,
               itemIds: state.itemIds,
               carousel,
               items: state.items,
@@ -449,11 +475,29 @@ function createCarouselReduce(config: CarouselConfig) {
             return { ...state, carousel };
           }
           case "release": {
-            const carousel = carouselReduce(state.carousel, action);
+            // Compute the snap target inline so we can read itemWidth/itemIds from state.
+            const { carousel } = state;
+            const vx =
+              carousel.type === "tracking" || carousel.type === "inertia"
+                ? carousel.velocity.vx
+                : 0;
+            const snapX = computeCarouselSnapTarget(
+              carousel.transform.x,
+              vx,
+              state.itemWidth,
+              state.itemIds.length,
+            );
             return {
               type: "free",
+              itemWidth: state.itemWidth,
+              itemHeight: state.itemHeight,
               itemIds: state.itemIds,
-              carousel,
+              carousel: {
+                type: "snapping",
+                transform: carousel.transform,
+                lastUpdatedAt: carousel.lastUpdatedAt,
+                target: { x: snapX, y: 0, scale: 1 },
+              },
               items: state.items,
             };
           }
@@ -497,6 +541,8 @@ function createCarouselReduce(config: CarouselConfig) {
             };
             return {
               type: "free",
+              itemWidth: state.itemWidth,
+              itemHeight: state.itemHeight,
               itemIds: state.itemIds,
               carousel: state.carousel,
               items,
