@@ -12,7 +12,7 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
   const callbacks = new Set<StateCallback<TState>>();
 
   let state = model.reduce(undefined, { type: "tick", timestamp: 0 });
-  let lastEmittedPublicState: TState = model.publish(state);
+  let lastEmittedPublicState: TState | undefined;
   let lastEmittedState: TPrivateState | undefined;
 
   let rafId: number | null = null;
@@ -27,7 +27,7 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
     }
     lastEmittedState = state;
     const publicState = model.publish(state);
-    const prevPublicState = lastEmittedPublicState;
+    const prevPublicState = lastEmittedPublicState ?? publicState;
     lastEmittedPublicState = publicState;
     for (const cb of callbacks) cb(publicState, prevPublicState);
     rafId = requestAnimationFrame(loop);
@@ -52,7 +52,7 @@ export function createStore<TPrivateState, TState, TExtraAction = never>(
     },
     flush() {
       const publicState = model.publish(state);
-      const prevPublicState = lastEmittedPublicState;
+      const prevPublicState = lastEmittedPublicState ?? publicState;
       lastEmittedPublicState = publicState;
       lastEmittedState = state;
       for (const cb of callbacks) cb(publicState, prevPublicState);

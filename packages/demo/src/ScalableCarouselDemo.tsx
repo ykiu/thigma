@@ -54,7 +54,7 @@ export function ScalableCarouselDemo() {
       dialogRef.current?.showModal();
       carouselImg?.style.setProperty("view-transition-name", "selected-photo");
     });
-    transition.finished.then(() => {
+    transition.finished.finally(() => {
       carouselImg?.style.removeProperty("view-transition-name");
     });
   }
@@ -73,7 +73,7 @@ export function ScalableCarouselDemo() {
       carouselImg?.style.removeProperty("view-transition-name");
       gridImg?.style.setProperty("view-transition-name", "selected-photo");
     });
-    transition.finished.then(() => {
+    transition.finished.finally(() => {
       gridImg?.style.removeProperty("view-transition-name");
     });
   }
@@ -123,7 +123,7 @@ export function ScalableCarouselDemo() {
             opacity: 1 !important;
             mix-blend-mode: normal !important;
 
-            // Place the image in the center of the container and make it cover the area, similar to object-fit: cover
+            /* Place the image in the center of the container and make it cover the area, similar to object-fit: cover */
             position: absolute;
             top: 50%;
             left: 50%;
