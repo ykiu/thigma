@@ -41,13 +41,6 @@ export type InterpreterEvent =
       timestamp: number;
     };
 
-// TODO: Move to a new module
-export type State = {
-  transformX: number;
-  transformY: number;
-  scale: number;
-};
-
 export type MountedInterpreter = {
   subscribe: (cb: InterpreterCallback<InterpreterEvent>) => UnsubscribeFn;
   unmount: UnmountFn;

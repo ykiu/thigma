@@ -6,7 +6,6 @@ export type {
   MountedInterpreter,
   MountedRenderer,
   Renderer,
-  State,
   StateCallback,
   Store,
   UnmountFn,
@@ -24,8 +23,10 @@ export { createRenderer } from "./renderer/index.js";
 export {
   createModel,
   createCarouselModel,
+  type State,
   type BoundsConfig,
   type TransformConfig,
+  type TransformSnapTarget,
   type CarouselConfig,
   type CarouselPublicState,
   type CarouselAction,

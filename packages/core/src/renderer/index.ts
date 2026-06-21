@@ -1,4 +1,5 @@
-import type { Renderer, MountedRenderer, Store, State } from "../types.js";
+import type { Renderer, MountedRenderer, Store } from "../types.js";
+import type { State } from "../model/simple.js";
 
 export function createRenderer(): Renderer<State> {
   return (element: HTMLElement | SVGElement, store: Store<State>): MountedRenderer => {
