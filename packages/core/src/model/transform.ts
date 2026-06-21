@@ -10,21 +10,23 @@ import {
 
 export type TransformSnapTarget = { x: number; y: number; scale: number };
 
+/**
+ * Constrains the element so its edges stay within the given coordinates.
+ * - `left`/`top`: element's left/top edge must be ≤ this value (maxima)
+ * - `right`/`bottom`: element's right/bottom edge must be ≥ this value (minima)
+ * Also enforces a minimum scale so the element can always satisfy these constraints.
+ */
+export type BoundsConfig = {
+  elementWidth: number;
+  elementHeight: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+};
+
 export type TransformConfig = {
-  elementWidth?: number;
-  elementHeight?: number;
-  /**
-   * Constrains the element so its edges stay within the given coordinates.
-   * - `left`/`top`: element's left/top edge must be ≤ this value (maxima)
-   * - `right`/`bottom`: element's right/bottom edge must be ≥ this value (minima)
-   * Also enforces a minimum scale so the element can always satisfy these constraints.
-   */
-  bounds?: {
-    left?: number;
-    right?: number;
-    top?: number;
-    bottom?: number;
-  };
+  bounds?: BoundsConfig;
   snapTarget?: (state: {
     transform: Transform;
     velocity: TransformVelocity;
@@ -62,11 +64,8 @@ export type TransformPrivateState =
       lastUpdatedAt: number;
     };
 
-function computeMinScale(
-  bounds: NonNullable<TransformConfig["bounds"]>,
-  elementWidth: number,
-  elementHeight: number,
-): number {
+function computeMinScale(bounds: BoundsConfig): number {
+  const { elementWidth, elementHeight } = bounds;
   let minScale = 0;
   if (bounds.right != null && elementWidth > 0)
     minScale = Math.max(minScale, bounds.right / elementWidth);
@@ -95,13 +94,7 @@ export function settleTransform(state: {
 }
 
 export function createTransformReduce(config?: TransformConfig) {
-  const {
-    bounds,
-    snapTarget,
-    toggleZoomScale = 2,
-    elementWidth = 0,
-    elementHeight = 0,
-  } = config ?? {};
+  const { bounds, snapTarget, toggleZoomScale = 2 } = config ?? {};
 
   function clampPosition(
     scale: number,
@@ -109,6 +102,7 @@ export function createTransformReduce(config?: TransformConfig) {
     y: number,
   ): { x: number; y: number } {
     if (!bounds) return { x, y };
+    const { elementWidth, elementHeight } = bounds;
     return {
       x: Math.max(
         bounds.right != null ? bounds.right - elementWidth * scale : -Infinity,
@@ -163,11 +157,7 @@ export function createTransformReduce(config?: TransformConfig) {
             // Clamp dScale so scale cannot go below the minimum required by bounds.
             let effectiveDScale = dScale;
             if (bounds) {
-              const minScale = computeMinScale(
-                bounds,
-                elementWidth,
-                elementHeight,
-              );
+              const minScale = computeMinScale(bounds);
               effectiveDScale = Math.max(
                 dScale,
                 minScale / state.transform.scale,
@@ -268,11 +258,7 @@ export function createTransformReduce(config?: TransformConfig) {
               state.transform.scale * Math.exp(newLogVScale * dtMs);
 
             if (bounds) {
-              const minScale = computeMinScale(
-                bounds,
-                elementWidth,
-                elementHeight,
-              );
+              const minScale = computeMinScale(bounds);
               if (newScale < minScale) {
                 newScale = minScale;
                 newLogVScale = 0;

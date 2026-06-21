@@ -393,9 +393,7 @@ describe("createTransformReduce", () => {
       // At scale=2: minX = 400 - 400*2 = -400, maxX = 0
       // tap at originX=500: proposed targetX = 500*(1-2)+0*2 = -500, clamped to -400
       const reduce = createTransformReduce({
-        elementWidth: 400,
-        elementHeight: 600,
-        bounds: { left: 0, right: 400, top: 0, bottom: 600 },
+        bounds: { elementWidth: 400, elementHeight: 600, left: 0, right: 400, top: 0, bottom: 600 },
       });
       const state = reduce(
         { type: "settled", ...makeTransform() },
@@ -423,9 +421,7 @@ describe("createTransformReduce", () => {
   describe("bounds", () => {
     function makeReduceWithBounds() {
       return createTransformReduce({
-        elementWidth: 400,
-        elementHeight: 600,
-        bounds: { left: 0, right: 400, top: 0, bottom: 600 },
+        bounds: { elementWidth: 400, elementHeight: 600, left: 0, right: 400, top: 0, bottom: 600 },
       });
     }
 

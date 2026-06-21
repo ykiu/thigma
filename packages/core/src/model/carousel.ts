@@ -138,9 +138,7 @@ function createCarouselReduce(config: CarouselConfig) {
   let itemCount = itemIds.length;
 
   const itemReduce = createTransformReduce({
-    elementWidth: itemWidth,
-    elementHeight: itemHeight,
-    bounds: { left: 0, right: itemWidth, top: 0, bottom: itemHeight },
+    bounds: { elementWidth: itemWidth, elementHeight: itemHeight, left: 0, right: itemWidth, top: 0, bottom: itemHeight },
   });
 
   const carouselReduce = createTransformReduce({

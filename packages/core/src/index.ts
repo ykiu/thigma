@@ -24,6 +24,7 @@ export { createRenderer } from "./renderer/index.js";
 export {
   createModel,
   createCarouselModel,
+  type BoundsConfig,
   type TransformConfig,
   type CarouselConfig,
   type CarouselPublicState,
