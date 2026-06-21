@@ -105,7 +105,6 @@ export function ScalableCarouselItem({
         width: ctx?.itemWidth ?? 0,
         height: ctx?.itemHeight ?? 0,
         flexShrink: 0,
-        overflow: "hidden",
         cursor: "grab",
       }}
     >
@@ -260,7 +259,7 @@ export function ScalableCarouselContainer({
   return (
     <div
       className={className}
-      style={{ overflow: "hidden", touchAction: "none" }}
+      style={{ touchAction: "none" }}
     >
       <div ref={stripRef} style={{ display: "flex" }}>
         <CarouselContext.Provider value={contextValue}>
