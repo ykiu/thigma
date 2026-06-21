@@ -33,7 +33,7 @@ export type CarouselPublicState = {
 };
 
 export type CarouselAction =
-  | TransformAction
+  | Exclude<TransformAction, { type: "set-bounds" }>
   | { type: "set-config"; config: CarouselConfig }
   | { type: "navigate-to"; index: number };
 
@@ -449,8 +449,6 @@ function createCarouselReduce(config: CarouselConfig) {
               return state;
             return { ...state, carousel, items };
           }
-          case "set-bounds":
-            return state;
         }
         throw new Error("unreachable");
       }
@@ -514,8 +512,6 @@ function createCarouselReduce(config: CarouselConfig) {
               return state;
             return { ...state, carousel, items };
           }
-          case "set-bounds":
-            return state;
         }
         throw new Error("unreachable");
       }
@@ -574,8 +570,6 @@ function createCarouselReduce(config: CarouselConfig) {
               return state;
             return { ...state, carousel, items };
           }
-          case "set-bounds":
-            return state;
         }
         throw new Error("unreachable");
       }

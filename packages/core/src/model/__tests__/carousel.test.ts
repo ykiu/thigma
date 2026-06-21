@@ -4,7 +4,7 @@ import {
   type CarouselPrivateState,
   type CarouselAction,
 } from "../carousel.js";
-import type { BoundsConfig, TransformPrivateState } from "../index.js";
+import type { BoundsConfig, TransformPrivateState } from "../transform.js";
 
 const ITEM_WIDTH = 400;
 const ITEM_HEIGHT = 600;
