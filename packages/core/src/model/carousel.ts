@@ -20,6 +20,8 @@ export type CarouselConfig = {
 };
 
 export type CarouselPublicState = {
+  /** True when the carousel strip has come to rest at a snap point. */
+  isCarouselSettled: boolean;
   /** Horizontal translation of the carousel strip (px). Negative = scrolled right. */
   carouselTranslateX: number;
   /** Per-item transform state keyed by item ID. */
@@ -124,7 +126,11 @@ function toCarouselPublicState(
       scale: item.transform.scale,
     };
   }
-  return { carouselTranslateX: state.carousel.transform.x, items };
+  return {
+    isCarouselSettled: state.carousel.type === "settled",
+    carouselTranslateX: state.carousel.transform.x,
+    items,
+  };
 }
 
 export function createCarouselModel(

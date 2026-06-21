@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   touchInterpreter,
   mouseDragInterpreter,
@@ -27,17 +28,54 @@ const interpreters = [
 
 export function ScalableCarouselDemo() {
   const [items, setItems] = useState(INITIAL_ITEMS);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedItemId, setSelectedItemId] = useState(INITIAL_ITEMS[0].id);
   const nextItemIdRef = useRef(INITIAL_ITEMS.length);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const gridImgRefs = useRef(new Map<string, HTMLImageElement>());
+  const carouselImgRefs = useRef(new Map<string, HTMLImageElement>());
+
+  const selectedIndex = items.findIndex((i) => i.id === selectedItemId);
 
   function openModal(index: number) {
-    setSelectedIndex(index);
-    dialogRef.current?.showModal();
+    const { id } = items[index];
+    const gridImg = gridImgRefs.current.get(id);
+    const carouselImg = carouselImgRefs.current.get(id);
+
+    if (!document.startViewTransition) {
+      setSelectedItemId(id);
+      dialogRef.current?.showModal();
+      return;
+    }
+
+    gridImg?.style.setProperty("view-transition-name", "selected-photo");
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setSelectedItemId(id));
+      gridImg?.style.removeProperty("view-transition-name");
+      dialogRef.current?.showModal();
+      carouselImg?.style.setProperty("view-transition-name", "selected-photo");
+    });
+    transition.finished.finally(() => {
+      carouselImg?.style.removeProperty("view-transition-name");
+    });
   }
 
   function closeModal() {
-    dialogRef.current?.close();
+    const gridImg = gridImgRefs.current.get(selectedItemId);
+    const carouselImg = carouselImgRefs.current.get(selectedItemId);
+
+    if (!document.startViewTransition) {
+      dialogRef.current?.close();
+      return;
+    }
+    carouselImg?.style.setProperty("view-transition-name", "selected-photo");
+    const transition = document.startViewTransition(() => {
+      dialogRef.current?.close();
+      carouselImg?.style.removeProperty("view-transition-name");
+      gridImg?.style.setProperty("view-transition-name", "selected-photo");
+    });
+    transition.finished.finally(() => {
+      gridImg?.style.removeProperty("view-transition-name");
+    });
   }
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
@@ -55,16 +93,48 @@ export function ScalableCarouselDemo() {
       newItem,
       ...prev.slice(index),
     ]);
-    setSelectedIndex(index);
+    setSelectedItemId(newItem.id);
   }
 
   function removeItemAt(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
-    setSelectedIndex(Math.max(0, Math.min(index, items.length - 2)));
+    const newItems = items.filter((_, i) => i !== index);
+    const newIndex = Math.max(0, Math.min(index, newItems.length - 1));
+    setItems(newItems);
+    setSelectedItemId(newItems[newIndex]?.id ?? "");
   }
 
   return (
     <div className="flex-1 overflow-auto bg-gray-900 p-4">
+      <style>
+        {`
+          ::view-transition-group(selected-photo) {
+            animation-duration: 400ms;
+            animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+          }
+          ::view-transition-image-pair(selected-photo) {
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: block;
+          }
+          ::view-transition-old(selected-photo),
+          ::view-transition-new(selected-photo) {
+            opacity: 1 !important;
+            mix-blend-mode: normal !important;
+
+            /* Place the image in the center of the container and make it cover the area, similar to object-fit: cover */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+
+            object-fit: cover;
+          }
+          `}
+      </style>
       <div className="grid grid-cols-3 gap-2">
         {items.map(({ id, photoId }, index) => (
           <button
@@ -74,6 +144,10 @@ export function ScalableCarouselDemo() {
             onClick={() => openModal(index)}
           >
             <img
+              ref={(el) => {
+                if (el) gridImgRefs.current.set(id, el);
+                else gridImgRefs.current.delete(id);
+              }}
               src={`https://picsum.photos/id/${photoId}/300/300`}
               alt={id}
               draggable={false}
@@ -104,7 +178,8 @@ export function ScalableCarouselDemo() {
             <ScalableCarouselContainer
               itemWidth={ITEM_WIDTH}
               itemHeight={ITEM_HEIGHT}
-              selectedIndex={selectedIndex}
+              selectedItemId={selectedItemId}
+              onSelectedItemIdChange={setSelectedItemId}
             >
               {items.map(({ id, photoId }) => (
                 <ScalableCarouselItem
@@ -113,6 +188,10 @@ export function ScalableCarouselDemo() {
                   interpreters={interpreters}
                 >
                   <img
+                    ref={(el) => {
+                      if (el) carouselImgRefs.current.set(id, el);
+                      else carouselImgRefs.current.delete(id);
+                    }}
                     src={`https://picsum.photos/id/${photoId}/${ITEM_WIDTH}/${ITEM_HEIGHT}`}
                     alt={id}
                     draggable={false}
@@ -145,7 +224,9 @@ export function ScalableCarouselDemo() {
                     type="button"
                     className="px-2 py-1 rounded hover:text-white disabled:opacity-30"
                     disabled={selectedIndex === 0}
-                    onClick={() => setSelectedIndex((i) => i - 1)}
+                    onClick={() =>
+                      setSelectedItemId(items[selectedIndex - 1].id)
+                    }
                   >
                     ←
                   </button>
@@ -156,7 +237,9 @@ export function ScalableCarouselDemo() {
                     type="button"
                     className="px-2 py-1 rounded hover:text-white disabled:opacity-30"
                     disabled={selectedIndex === items.length - 1}
-                    onClick={() => setSelectedIndex((i) => i + 1)}
+                    onClick={() =>
+                      setSelectedItemId(items[selectedIndex + 1].id)
+                    }
                   >
                     →
                   </button>

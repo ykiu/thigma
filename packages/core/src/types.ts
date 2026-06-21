@@ -1,6 +1,7 @@
 export type UnsubscribeFn = () => void;
 export type UnmountFn = () => void;
-export type Callback<T> = (value: T) => void;
+export type InterpreterCallback<T> = (value: T) => void;
+export type StateCallback<T> = (state: T, prevState: T) => void;
 
 export type InterpreterEvent =
   | {
@@ -48,14 +49,14 @@ export type State = {
 };
 
 export type MountedInterpreter = {
-  subscribe: (cb: Callback<InterpreterEvent>) => UnsubscribeFn;
+  subscribe: (cb: InterpreterCallback<InterpreterEvent>) => UnsubscribeFn;
   unmount: UnmountFn;
 };
 
 export type Interpreter = (element: HTMLElement) => MountedInterpreter;
 
 export type Store<TState, TAction = StoreAction> = {
-  subscribe: (cb: Callback<TState>) => UnsubscribeFn;
+  subscribe: (cb: StateCallback<TState>) => UnsubscribeFn;
   dispatch: (action: TAction) => void;
   flush: () => void;
   unmount: UnmountFn;

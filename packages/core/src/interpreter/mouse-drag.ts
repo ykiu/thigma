@@ -1,8 +1,8 @@
 import type {
   Interpreter,
-  MountedInterpreter,
-  Callback,
+  InterpreterCallback,
   InterpreterEvent,
+  MountedInterpreter,
   UnsubscribeFn,
 } from "../types.js";
 
@@ -58,7 +58,7 @@ function reduce(state: MouseDragState, action: MouseDragAction): ReducerResult {
 
 export function mouseDragInterpreter(): Interpreter {
   return (element: Element): MountedInterpreter => {
-    const callbacks = new Set<Callback<InterpreterEvent>>();
+    const callbacks = new Set<InterpreterCallback<InterpreterEvent>>();
     let state: MouseDragState = { type: "idle" };
 
     function dispatch(action: MouseDragAction) {
@@ -91,7 +91,7 @@ export function mouseDragInterpreter(): Interpreter {
     window.addEventListener("mouseup", onMouseUp);
 
     return {
-      subscribe(cb: Callback<InterpreterEvent>): UnsubscribeFn {
+      subscribe(cb: InterpreterCallback<InterpreterEvent>): UnsubscribeFn {
         callbacks.add(cb);
         return () => callbacks.delete(cb);
       },

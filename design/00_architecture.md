@@ -9,7 +9,8 @@ All transformations in this library are expressed as a combination of transformX
 ```typescript
 type UnsubscribeFn = () => void;
 type UnmountFn = () => void;
-type Callback<T> = (value: T) => void;
+type InterpreterCallback<T> = (value: T) => void;
+type StateCallback<T> = (state: T, prevState: T) => void;
 ```
 
 **Reducer** is the core abstraction for state machines in this library. A Reducer is a pure function that takes the current state and an action, and returns the next state. The first call passes `undefined` for state; the reducer must return an initial state in that case.
@@ -107,7 +108,7 @@ Key interfaces and functions:
 ```typescript
 type Interpreter = (element: Element) => MountedInterpreter;
 type MountedInterpreter = {
-  subscribe: (cb: Callback<InterpreterEvent>) => UnsubscribeFn;
+  subscribe: (cb: InterpreterCallback<InterpreterEvent>) => UnsubscribeFn;
   unmount: UnmountFn;
 };
 
@@ -243,7 +244,7 @@ The Store's update loop emits state to subscribers on every frame where the stat
 
 ```typescript
 type Store<TState, TAction = StoreAction> = {
-  subscribe: (cb: Callback<TState>) => UnsubscribeFn;
+  subscribe: (cb: StateCallback<TState>) => UnsubscribeFn;
   dispatch: (action: TAction) => void;
   /** Synchronously fires all subscribers with the current public state. */
   flush: () => void;

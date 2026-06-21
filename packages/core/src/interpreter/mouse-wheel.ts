@@ -1,8 +1,8 @@
 import type {
   Interpreter,
-  MountedInterpreter,
-  Callback,
+  InterpreterCallback,
   InterpreterEvent,
+  MountedInterpreter,
   UnsubscribeFn,
 } from "../types.js";
 
@@ -16,7 +16,7 @@ const SCALE_PER_PIXEL = 0.002;
 
 export function mouseWheelInterpreter(): Interpreter {
   return (element: Element): MountedInterpreter => {
-    const callbacks = new Set<Callback<InterpreterEvent>>();
+    const callbacks = new Set<InterpreterCallback<InterpreterEvent>>();
 
     function emit(event: InterpreterEvent) {
       for (const cb of callbacks) cb(event);
@@ -65,7 +65,7 @@ export function mouseWheelInterpreter(): Interpreter {
     });
 
     return {
-      subscribe(cb: Callback<InterpreterEvent>): UnsubscribeFn {
+      subscribe(cb: InterpreterCallback<InterpreterEvent>): UnsubscribeFn {
         callbacks.add(cb);
         return () => callbacks.delete(cb);
       },

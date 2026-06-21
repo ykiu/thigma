@@ -1,15 +1,16 @@
 export type {
-  UnsubscribeFn,
-  UnmountFn,
-  Callback,
-  InterpreterEvent,
-  State,
-  MountedInterpreter,
   Interpreter,
-  Store,
+  InterpreterCallback,
+  InterpreterEvent,
+  Model,
+  MountedInterpreter,
   MountedRenderer,
   Renderer,
-  Model,
+  State,
+  StateCallback,
+  Store,
+  UnmountFn,
+  UnsubscribeFn,
 } from "./types.js";
 
 export {

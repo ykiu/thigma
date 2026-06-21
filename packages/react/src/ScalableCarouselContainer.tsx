@@ -124,7 +124,8 @@ type Props = {
   children?: ReactNode;
   itemWidth: number;
   itemHeight: number;
-  selectedIndex?: number;
+  selectedItemId?: string;
+  onSelectedItemIdChange?: (itemId: string) => void;
   className?: string;
 };
 
@@ -142,7 +143,8 @@ export function ScalableCarouselContainer({
   children,
   itemWidth,
   itemHeight,
-  selectedIndex,
+  selectedItemId,
+  onSelectedItemIdChange,
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
@@ -154,6 +156,9 @@ export function ScalableCarouselContainer({
   const itemIds = deriveItemIds(children);
   const itemIdsRef = useRef<readonly string[]>(itemIds);
   itemIdsRef.current = itemIds;
+
+  const onSelectedItemIdChangeRef = useRef(onSelectedItemIdChange);
+  onSelectedItemIdChangeRef.current = onSelectedItemIdChange;
 
   const itemIdsKey = itemIds.join(",");
 
@@ -168,9 +173,18 @@ export function ScalableCarouselContainer({
 
     setStore(s);
 
-    const unsubscribe = s.subscribe((state) => {
+    const unsubscribe = s.subscribe((state, prevState) => {
       if (stripRef.current) {
         stripRef.current.style.transform = `translateX(${state.carouselTranslateX}px)`;
+      }
+      if (state.isCarouselSettled && !prevState.isCarouselSettled) {
+        const index = Math.round(-state.carouselTranslateX / itemWidth);
+        const clamped = Math.max(
+          0,
+          Math.min(itemIdsRef.current.length - 1, index),
+        );
+        const id = itemIdsRef.current[clamped];
+        if (id !== undefined) onSelectedItemIdChangeRef.current?.(id);
       }
     });
 
@@ -191,10 +205,12 @@ export function ScalableCarouselContainer({
   }, [store, itemWidth, itemHeight, itemIdsKey]);
 
   useLayoutEffect(() => {
-    if (selectedIndex === undefined || !store) return;
-    store.dispatch({ type: "navigate-to", index: selectedIndex });
+    if (selectedItemId === undefined || !store) return;
+    const index = itemIdsRef.current.indexOf(selectedItemId);
+    if (index === -1) return;
+    store.dispatch({ type: "navigate-to", index });
     store.flush();
-  }, [store, selectedIndex]);
+  }, [store, selectedItemId]);
 
   const contextValue = useMemo(
     () => (store ? { store, itemWidth, itemHeight } : null),
