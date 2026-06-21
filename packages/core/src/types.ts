@@ -86,6 +86,6 @@ export type MountedRenderer = {
 };
 
 export type Renderer<TState> = (
-  element: Element,
+  element: HTMLElement | SVGElement,
   store: Store<TState>,
 ) => MountedRenderer;
