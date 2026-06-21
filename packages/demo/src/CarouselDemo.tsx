@@ -25,7 +25,10 @@ const interpreters = [
 export function CarouselDemo() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center">
-      <ScalableCarouselContainer itemWidth={ITEM_WIDTH} itemHeight={ITEM_HEIGHT}>
+      <ScalableCarouselContainer
+        itemWidth={ITEM_WIDTH}
+        itemHeight={ITEM_HEIGHT}
+      >
         {ITEMS.map(({ id, label, bg }) => (
           <ScalableCarouselItem key={id} id={id} interpreters={interpreters}>
             <div

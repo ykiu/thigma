@@ -2,7 +2,10 @@ import type { Renderer, MountedRenderer, Store } from "../types.js";
 import type { State } from "../model/simple.js";
 
 export function createRenderer(): Renderer<State> {
-  return (element: HTMLElement | SVGElement, store: Store<State>): MountedRenderer => {
+  return (
+    element: HTMLElement | SVGElement,
+    store: Store<State>,
+  ): MountedRenderer => {
     const el = element;
 
     const unsubscribe = store.subscribe(({ transformX, transformY, scale }) => {

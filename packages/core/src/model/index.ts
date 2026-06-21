@@ -15,9 +15,4 @@ export {
   type CarouselAction,
   type CarouselPrivateState,
 } from "./carousel.js";
-export {
-  type Transform,
-  type TransformVelocity,
-  computeDtMs,
-  applyScalePivot,
-} from "./primitives.js";
+export type { Transform, TransformVelocity } from "./primitives.js";
