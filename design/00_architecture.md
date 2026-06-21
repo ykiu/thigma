@@ -227,14 +227,14 @@ type CarouselPrivateState =
   | { type: "carousel";   itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
   | { type: "items";      itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string }
   | { type: "dismissing"; itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string; dismissX: number; dismissY: number; dismissVx: number; dismissVy: number; lastUpdatedAt: number }
-  | { type: "dismissed";  itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> };
+  | { type: "dismissed";  itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string; dismissX: number; dismissY: number };
 ```
 
 - **free** — no active gesture; animations may still be running on carousel or items.
 - **carousel** — gesture is scrolling the carousel strip.
 - **items** — gesture is targeting `activeItemId` for pan/zoom.
 - **dismissing** — user is actively swiping up/down to dismiss; position tracked in flat fields (not `TransformPrivateState`) because dismiss motion has no bounds and scale is derived from `y`.
-- **dismissed** — user released past the dismiss threshold; terminal state until the component unmounts.
+- **dismissed** — user released past the dismiss threshold; terminal state until the component unmounts. Retains `activeItemId`/`dismissX`/`dismissY` so the active item renders at the release position (needed for the view transition to start from the correct location).
 
 Tick advances both carousel and items animations in every phase.
 

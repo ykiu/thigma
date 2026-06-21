@@ -1374,6 +1374,9 @@ describe("createCarouselModel", () => {
             b: makeSettledItem(),
             c: makeSettledItem(),
           },
+          activeItemId: "a",
+          dismissX: 0,
+          dismissY: -400,
         };
         expect(reduce(dismissed, { type: "tick", timestamp: 100 })).toBe(
           dismissed,
@@ -1393,7 +1396,7 @@ describe("createCarouselModel", () => {
         expect(pub.items.a.scale).toBeCloseTo(0.75);
       });
 
-      it("dismissed: isDismissed=true, dismissProgress=1", () => {
+      it("dismissed: isDismissed=true, dismissProgress=1, active item at dismiss position", () => {
         const { publish } = createCarouselModel(DISMISSIBLE_CONFIG);
         const dismissed: CarouselPrivateState = {
           type: "dismissed",
@@ -1406,10 +1409,22 @@ describe("createCarouselModel", () => {
             b: makeSettledItem(),
             c: makeSettledItem(),
           },
+          activeItemId: "a",
+          dismissX: 5,
+          dismissY: -400,
         };
         const pub = publish(dismissed);
         expect(pub.isDismissed).toBe(true);
         expect(pub.dismissProgress).toBe(1);
+        // Active item renders at the dismiss position, not the settled position,
+        // so the view transition captures the item where the user released it.
+        expect(pub.items.a.transformX).toBe(5);
+        expect(pub.items.a.transformY).toBe(-400);
+        expect(pub.items.a.scale).toBeCloseTo(
+          Math.max(0, 1 - 400 / (2 * ITEM_HEIGHT)),
+        );
+        // Non-active items use their settled positions.
+        expect(pub.items.b.transformY).toBe(0);
       });
     });
   });

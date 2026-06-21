@@ -98,6 +98,9 @@ export type CarouselPrivateState =
       itemIds: readonly string[];
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
+      activeItemId: string;
+      dismissX: number;
+      dismissY: number;
     };
 
 type MotionEvent = Extract<TransformAction, { type: "motion" }>;
@@ -150,16 +153,25 @@ function toCarouselPublicState(
   state: CarouselPrivateState,
 ): CarouselPublicState {
   if (state.type === "dismissed") {
+    const { activeItemId, dismissX, dismissY, itemHeight } = state;
     const items: Record<
       string,
       { transformX: number; transformY: number; scale: number }
     > = {};
     for (const [id, item] of Object.entries(state.items)) {
-      items[id] = {
-        transformX: item.transform.x,
-        transformY: item.transform.y,
-        scale: item.transform.scale,
-      };
+      if (id === activeItemId) {
+        items[id] = {
+          transformX: dismissX,
+          transformY: dismissY,
+          scale: deriveDismissScale(dismissY, itemHeight),
+        };
+      } else {
+        items[id] = {
+          transformX: item.transform.x,
+          transformY: item.transform.y,
+          scale: item.transform.scale,
+        };
+      }
     }
     return {
       isCarouselSettled: state.carousel.type === "settled",
@@ -717,6 +729,9 @@ function createCarouselReduce(config: CarouselConfig) {
                 itemIds: state.itemIds,
                 carousel: state.carousel,
                 items: state.items,
+                activeItemId: state.activeItemId,
+                dismissX: state.dismissX,
+                dismissY: state.dismissY,
               };
             }
             const activeItem = state.items[state.activeItemId];
