@@ -24,6 +24,9 @@ export type InterpreterEvent =
       dScale: number;
       originX: number;
       originY: number;
+      /** Initial touch/pointer position relative to the element's top-left corner (px). */
+      pointerX: number;
+      pointerY: number;
       timestamp: number;
     }
   | {

@@ -85,6 +85,8 @@ function reduce(state: TouchState, action: TouchAction): ReducerResult {
               dScale: 1,
               originX: 0,
               originY: 0,
+              pointerX: state.point.x - action.elementRect.left,
+              pointerY: state.point.y - action.elementRect.top,
             },
           };
         }

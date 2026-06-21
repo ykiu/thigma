@@ -105,7 +105,6 @@ export function ScalableCarouselItem({
         width: ctx?.itemWidth ?? 0,
         height: ctx?.itemHeight ?? 0,
         flexShrink: 0,
-        overflow: "hidden",
         cursor: "grab",
       }}
     >
@@ -126,6 +125,8 @@ type Props = {
   itemHeight: number;
   selectedItemId?: string;
   onSelectedItemIdChange?: (itemId: string) => void;
+  onDismiss?: () => void;
+  onDismissProgress?: (progress: number) => void;
   className?: string;
 };
 
@@ -145,6 +146,8 @@ export function ScalableCarouselContainer({
   itemHeight,
   selectedItemId,
   onSelectedItemIdChange,
+  onDismiss,
+  onDismissProgress,
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
@@ -166,6 +169,12 @@ export function ScalableCarouselContainer({
   const onSelectedItemIdChangeRef = useRef(onSelectedItemIdChange);
   onSelectedItemIdChangeRef.current = onSelectedItemIdChange;
 
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  const onDismissProgressRef = useRef(onDismissProgress);
+  onDismissProgressRef.current = onDismissProgress;
+
   const itemIdsKey = itemIds.join(",");
 
   useEffect(() => {
@@ -174,6 +183,7 @@ export function ScalableCarouselContainer({
         itemWidth: itemWidthRef.current,
         itemHeight: itemHeightRef.current,
         itemIds: itemIdsRef.current,
+        dismissible: !!onDismissRef.current,
       }),
     );
 
@@ -194,6 +204,23 @@ export function ScalableCarouselContainer({
         const id = itemIdsRef.current[clamped];
         if (id !== undefined) onSelectedItemIdChangeRef.current?.(id);
       }
+      if (state.isDismissed && !prevState.isDismissed) {
+        onDismissRef.current?.();
+        // Reset to free so the carousel is usable when the dialog re-opens.
+        // Without this, if selectedItemId doesn't change, useLayoutEffect won't
+        // re-dispatch navigate-to and the carousel stays stuck in dismissed.
+        const index = Math.round(
+          -state.carouselTranslateX / itemWidthRef.current,
+        );
+        const clamped = Math.max(
+          0,
+          Math.min(itemIdsRef.current.length - 1, index),
+        );
+        s.dispatch({ type: "navigate-to", index: clamped });
+      }
+      if (state.dismissProgress !== prevState.dismissProgress) {
+        onDismissProgressRef.current?.(state.dismissProgress);
+      }
     });
 
     return () => {
@@ -211,6 +238,7 @@ export function ScalableCarouselContainer({
         itemWidth: itemWidthRef.current,
         itemHeight: itemHeightRef.current,
         itemIds: itemIdsRef.current,
+        dismissible: !!onDismissRef.current,
       },
     });
   }, [store, itemWidth, itemHeight, itemIdsKey]);
@@ -231,7 +259,7 @@ export function ScalableCarouselContainer({
   return (
     <div
       className={className}
-      style={{ overflow: "hidden", touchAction: "none" }}
+      style={{ touchAction: "none" }}
     >
       <div ref={stripRef} style={{ display: "flex" }}>
         <CarouselContext.Provider value={contextValue}>

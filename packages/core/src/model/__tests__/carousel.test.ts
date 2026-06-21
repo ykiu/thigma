@@ -25,8 +25,17 @@ const DEFAULT_CONFIG = {
   itemIds: ITEM_IDS,
 } as const;
 
+const DISMISSIBLE_CONFIG = {
+  ...DEFAULT_CONFIG,
+  dismissible: true,
+} as const;
+
 function makeReduce() {
   return createCarouselModel(DEFAULT_CONFIG).reduce;
+}
+
+function makeDismissibleReduce() {
+  return createCarouselModel(DISMISSIBLE_CONFIG).reduce;
 }
 
 /** Common transform/timestamp fields without velocity (settled/snapping). */
@@ -1158,6 +1167,8 @@ describe("createCarouselModel", () => {
       const state = free(-400, { a: { x: -10, y: 5, scale: 1.5 } });
       const pub = publish(state);
       expect(pub.carouselTranslateX).toBe(-400);
+      expect(pub.isDismissed).toBe(false);
+      expect(pub.dismissProgress).toBe(0);
       expect(pub.items.a).toEqual({
         transformX: -10,
         transformY: 5,
@@ -1167,6 +1178,273 @@ describe("createCarouselModel", () => {
         transformX: 0,
         transformY: 0,
         scale: 1,
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // dismiss gesture
+  // -------------------------------------------------------------------------
+
+  function makeDismissingState(
+    dismissY = 0,
+    dismissVy = 0,
+    dismissPivotX = 0,
+    dismissPivotY = 0,
+  ): CarouselPrivateState {
+    return {
+      type: "dismissing",
+      itemWidth: ITEM_WIDTH,
+      itemHeight: ITEM_HEIGHT,
+      itemIds: ITEM_IDS,
+      carousel: makeSettledCarousel(),
+      items: {
+        a: makeSettledItem(),
+        b: makeSettledItem(),
+        c: makeSettledItem(),
+      },
+      activeItemId: "a",
+      dismissX: 0,
+      dismissY,
+      dismissVx: 0,
+      dismissVy,
+      dismissPivotX,
+      dismissPivotY,
+      lastUpdatedAt: 0,
+    };
+  }
+
+  describe("dismiss gesture", () => {
+    describe("free + slop → dismissing", () => {
+      it("transitions when |dy|>|dx|, scale=1, carousel settled, dismissible=true", () => {
+        const reduce = makeDismissibleReduce();
+        const state = reduce(free(), {
+          type: "slop",
+          itemId: "a",
+          dx: 5,
+          dy: 20,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+          pointerX: 200,
+          pointerY: 150,
+          timestamp: 100,
+        });
+        expect(state.type).toBe("dismissing");
+        if (state.type === "dismissing") {
+          expect(state.activeItemId).toBe("a");
+          expect(state.dismissX).toBe(0);
+          expect(state.dismissY).toBe(0);
+          expect(state.dismissPivotX).toBe(200);
+          expect(state.dismissPivotY).toBe(150);
+        }
+      });
+
+      it("stays free when |dx|>=|dy| (horizontal swipe)", () => {
+        const reduce = makeDismissibleReduce();
+        const before = free();
+        const after = reduce(before, {
+          type: "slop",
+          itemId: "a",
+          dx: 20,
+          dy: 5,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+          pointerX: 0,
+          pointerY: 0,
+          timestamp: 100,
+        });
+        expect(after).toBe(before);
+      });
+
+      it("stays free when item scale != 1 (zoomed)", () => {
+        const reduce = makeDismissibleReduce();
+        const before = free(0, { a: { x: -50, y: -50, scale: 2 } });
+        const after = reduce(before, {
+          type: "slop",
+          itemId: "a",
+          dx: 5,
+          dy: 20,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+          pointerX: 0,
+          pointerY: 0,
+          timestamp: 100,
+        });
+        expect(after).toBe(before);
+      });
+
+      it("stays free when carousel is not settled", () => {
+        const reduce = makeDismissibleReduce();
+        const snappingFree: CarouselPrivateState = {
+          type: "free",
+          itemWidth: ITEM_WIDTH,
+          itemHeight: ITEM_HEIGHT,
+          itemIds: ITEM_IDS,
+          carousel: {
+            type: "snapping",
+            transform: { x: -200, y: 0, scale: 1 },
+            lastUpdatedAt: 0,
+            target: { x: -ITEM_WIDTH, y: 0, scale: 1 },
+          },
+          items: {
+            a: makeSettledItem(),
+            b: makeSettledItem(),
+            c: makeSettledItem(),
+          },
+        };
+        const after = reduce(snappingFree, {
+          type: "slop",
+          itemId: "a",
+          dx: 5,
+          dy: 20,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+          pointerX: 0,
+          pointerY: 0,
+          timestamp: 100,
+        });
+        expect(after).toBe(snappingFree);
+      });
+
+      it("stays free when dismissible=false", () => {
+        const reduce = makeReduce();
+        const before = free();
+        const after = reduce(before, {
+          type: "slop",
+          itemId: "a",
+          dx: 5,
+          dy: 20,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+          pointerX: 0,
+          pointerY: 0,
+          timestamp: 100,
+        });
+        expect(after).toBe(before);
+      });
+    });
+
+    describe("dismissing + motion", () => {
+      it("updates dismissX/Y and velocity", () => {
+        const reduce = makeDismissibleReduce();
+        const state = reduce(makeDismissingState(), {
+          type: "motion",
+          itemId: "a",
+          dx: 10,
+          dy: -50,
+          dScale: 1,
+          originX: 0,
+          originY: 0,
+          timestamp: 100,
+        });
+        expect(state.type).toBe("dismissing");
+        if (state.type === "dismissing") {
+          expect(state.dismissX).toBe(10);
+          expect(state.dismissY).toBe(-50);
+          expect(state.dismissVy).toBeCloseTo(-50 / 100);
+        }
+      });
+    });
+
+    describe("dismissing + release", () => {
+      it("transitions to dismissed when projected |y| > itemHeight * 0.5", () => {
+        // dismissY=-400, dismissVy=-5 → projected = -400 + (-5 / INERTIA_DECAY)
+        // INERTIA_DECAY ≈ 0.01005; projected ≈ -400 - 497 ≈ -897, well past threshold=300
+        const reduce = makeDismissibleReduce();
+        const state = reduce(makeDismissingState(-400, -5), {
+          type: "release",
+        });
+        expect(state.type).toBe("dismissed");
+      });
+
+      it("transitions to free with snapping item when projected |y| <= itemHeight * 0.5", () => {
+        // dismissY=-10, dismissVy=0 → projected = -10, threshold=300
+        const reduce = makeDismissibleReduce();
+        const state = reduce(makeDismissingState(-10, 0), { type: "release" });
+        expect(state.type).toBe("free");
+        if (state.type === "free") {
+          expect(state.items.a.type).toBe("snapping");
+          if (state.items.a.type === "snapping") {
+            expect(state.items.a.target).toEqual({ x: 0, y: 0, scale: 1 });
+          }
+        }
+      });
+    });
+
+    describe("dismissed + tick", () => {
+      it("returns same reference (animation loop stays paused)", () => {
+        const reduce = makeDismissibleReduce();
+        const dismissed: CarouselPrivateState = {
+          type: "dismissed",
+          itemWidth: ITEM_WIDTH,
+          itemHeight: ITEM_HEIGHT,
+          itemIds: ITEM_IDS,
+          carousel: makeSettledCarousel(),
+          items: {
+            a: makeSettledItem(),
+            b: makeSettledItem(),
+            c: makeSettledItem(),
+          },
+          activeItemId: "a",
+          dismissX: 0,
+          dismissY: -400,
+          dismissPivotX: 0,
+          dismissPivotY: 0,
+        };
+        expect(reduce(dismissed, { type: "tick", timestamp: 100 })).toBe(
+          dismissed,
+        );
+      });
+    });
+
+    describe("publish from dismissing/dismissed", () => {
+      it("dismissing: active item uses dismiss position/scale, dismissProgress computed from y", () => {
+        const { publish } = createCarouselModel(DISMISSIBLE_CONFIG);
+        // dismissY=-300 → progress = |−300| / (2*600) = 0.25; scale = 1 - 0.25 = 0.75
+        const state = makeDismissingState(-300, 0);
+        const pub = publish(state);
+        expect(pub.isDismissed).toBe(false);
+        expect(pub.dismissProgress).toBeCloseTo(0.25);
+        expect(pub.items.a.transformY).toBe(-300);
+        expect(pub.items.a.scale).toBeCloseTo(0.75);
+      });
+
+      it("dismissed: isDismissed=true, dismissProgress=1, active item at dismiss position", () => {
+        const { publish } = createCarouselModel(DISMISSIBLE_CONFIG);
+        const dismissed: CarouselPrivateState = {
+          type: "dismissed",
+          itemWidth: ITEM_WIDTH,
+          itemHeight: ITEM_HEIGHT,
+          itemIds: ITEM_IDS,
+          carousel: makeSettledCarousel(),
+          items: {
+            a: makeSettledItem(),
+            b: makeSettledItem(),
+            c: makeSettledItem(),
+          },
+          activeItemId: "a",
+          dismissX: 5,
+          dismissY: -400,
+          dismissPivotX: 0,
+          dismissPivotY: 0,
+        };
+        const pub = publish(dismissed);
+        expect(pub.isDismissed).toBe(true);
+        expect(pub.dismissProgress).toBe(1);
+        // Active item renders at the dismiss position, not the settled position,
+        // so the view transition captures the item where the user released it.
+        expect(pub.items.a.transformX).toBe(5);
+        expect(pub.items.a.transformY).toBe(-400);
+        expect(pub.items.a.scale).toBeCloseTo(
+          Math.max(0, 1 - 400 / (2 * ITEM_HEIGHT)),
+        );
+        // Non-active items use their settled positions.
+        expect(pub.items.b.transformY).toBe(0);
       });
     });
   });

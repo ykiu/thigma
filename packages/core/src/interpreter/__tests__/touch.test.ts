@@ -67,6 +67,9 @@ describe("touchInterpreter", () => {
       dx: 10,
       dy: 20,
       dScale: 1,
+      // Initial touchstart position (100,100) relative to element rect (left:0, top:0)
+      pointerX: 100,
+      pointerY: 100,
     });
     expect(typeof (events[0] as { timestamp: unknown }).timestamp).toBe(
       "number",

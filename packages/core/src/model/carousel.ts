@@ -6,6 +6,7 @@ import {
   createTransformReduce,
   settleTransform,
 } from "./transform.js";
+import { computeDtMs } from "./primitives.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -18,6 +19,8 @@ export type CarouselConfig = {
   itemHeight: number;
   /** Ordered list of item identifiers. */
   itemIds: readonly string[];
+  /** When true, a vertical slop gesture on a scale=1 settled item enters dismissing state. */
+  dismissible?: boolean;
 };
 
 export type CarouselPublicState = {
@@ -30,7 +33,10 @@ export type CarouselPublicState = {
     string,
     { transformX: number; transformY: number; scale: number }
   >;
-};
+} & (
+  | { isDismissed: false; dismissProgress: number }
+  | { isDismissed: true; dismissProgress: 1 }
+);
 
 export type CarouselAction =
   | Exclude<TransformAction, { type: "set-bounds" }>
@@ -66,6 +72,39 @@ export type CarouselPrivateState =
       carousel: TransformPrivateState;
       items: Record<string, TransformPrivateState>;
       activeItemId: string;
+    }
+  | {
+      // Position tracked in flat fields rather than TransformPrivateState because
+      // dismiss motion has no bounds, no pinch scale, and scale is derived from y
+      // rather than tracked — reusing TransformPrivateState would conflict with its
+      // scale-tracking logic.
+      type: "dismissing";
+      itemWidth: number;
+      itemHeight: number;
+      itemIds: readonly string[];
+      carousel: TransformPrivateState;
+      items: Record<string, TransformPrivateState>;
+      activeItemId: string;
+      dismissX: number;
+      dismissY: number;
+      dismissVx: number;
+      dismissVy: number;
+      dismissPivotX: number;
+      dismissPivotY: number;
+      lastUpdatedAt: number;
+    }
+  | {
+      type: "dismissed";
+      itemWidth: number;
+      itemHeight: number;
+      itemIds: readonly string[];
+      carousel: TransformPrivateState;
+      items: Record<string, TransformPrivateState>;
+      activeItemId: string;
+      dismissX: number;
+      dismissY: number;
+      dismissPivotX: number;
+      dismissPivotY: number;
     };
 
 type MotionEvent = Extract<TransformAction, { type: "motion" }>;
@@ -110,9 +149,89 @@ function computeCarouselSnapTarget(
 // Public API
 // ---------------------------------------------------------------------------
 
+function deriveDismissScale(y: number, itemHeight: number): number {
+  return Math.max(0, 1 - Math.abs(y) / (2 * itemHeight));
+}
+
 function toCarouselPublicState(
   state: CarouselPrivateState,
 ): CarouselPublicState {
+  if (state.type === "dismissed") {
+    const {
+      activeItemId,
+      dismissX,
+      dismissY,
+      dismissPivotX,
+      dismissPivotY,
+      itemHeight,
+    } = state;
+    const items: Record<
+      string,
+      { transformX: number; transformY: number; scale: number }
+    > = {};
+    for (const [id, item] of Object.entries(state.items)) {
+      if (id === activeItemId) {
+        const scale = deriveDismissScale(dismissY, itemHeight);
+        items[id] = {
+          transformX: dismissX + dismissPivotX * (1 - scale),
+          transformY: dismissY + dismissPivotY * (1 - scale),
+          scale,
+        };
+      } else {
+        items[id] = {
+          transformX: item.transform.x,
+          transformY: item.transform.y,
+          scale: item.transform.scale,
+        };
+      }
+    }
+    return {
+      isCarouselSettled: state.carousel.type === "settled",
+      carouselTranslateX: state.carousel.transform.x,
+      items,
+      isDismissed: true,
+      dismissProgress: 1,
+    };
+  }
+
+  if (state.type === "dismissing") {
+    const {
+      activeItemId,
+      dismissX,
+      dismissY,
+      dismissPivotX,
+      dismissPivotY,
+      itemHeight,
+    } = state;
+    const items: Record<
+      string,
+      { transformX: number; transformY: number; scale: number }
+    > = {};
+    for (const [id, item] of Object.entries(state.items)) {
+      if (id === activeItemId) {
+        const scale = deriveDismissScale(dismissY, itemHeight);
+        items[id] = {
+          transformX: dismissX + dismissPivotX * (1 - scale),
+          transformY: dismissY + dismissPivotY * (1 - scale),
+          scale,
+        };
+      } else {
+        items[id] = {
+          transformX: item.transform.x,
+          transformY: item.transform.y,
+          scale: item.transform.scale,
+        };
+      }
+    }
+    return {
+      isCarouselSettled: state.carousel.type === "settled",
+      carouselTranslateX: state.carousel.transform.x,
+      items,
+      isDismissed: false,
+      dismissProgress: Math.min(1, Math.abs(dismissY) / (2 * itemHeight)),
+    };
+  }
+
   const items: Record<
     string,
     { transformX: number; transformY: number; scale: number }
@@ -128,6 +247,8 @@ function toCarouselPublicState(
     isCarouselSettled: state.carousel.type === "settled",
     carouselTranslateX: state.carousel.transform.x,
     items,
+    isDismissed: false,
+    dismissProgress: 0,
   };
 }
 
@@ -139,7 +260,7 @@ export function createCarouselModel(
 }
 
 function createCarouselReduce(config: CarouselConfig) {
-  const { itemWidth, itemHeight, itemIds } = config;
+  const { itemWidth, itemHeight, itemIds, dismissible = false } = config;
 
   // Both reducers are stable constants — no closure state. Bounds live in
   // each item's TransformPrivateState and are updated via "set-bounds".
@@ -316,7 +437,10 @@ function createCarouselReduce(config: CarouselConfig) {
       }
     }
 
-    if (state.type === "items" && !newItemIds.includes(state.activeItemId)) {
+    if (
+      (state.type === "items" || state.type === "dismissing") &&
+      !newItemIds.includes(state.activeItemId)
+    ) {
       return {
         type: "free",
         itemWidth: newItemWidth,
@@ -428,8 +552,35 @@ function createCarouselReduce(config: CarouselConfig) {
           }
           case "release":
             return state;
-          case "slop":
+          case "slop": {
+            if (
+              dismissible &&
+              state.carousel.type === "settled" &&
+              action.itemId !== undefined &&
+              Math.abs(action.dy) > Math.abs(action.dx)
+            ) {
+              const item = state.items[action.itemId];
+              if (item?.transform.scale === 1 && item.type === "settled") {
+                return {
+                  type: "dismissing",
+                  itemWidth: state.itemWidth,
+                  itemHeight: state.itemHeight,
+                  itemIds: state.itemIds,
+                  carousel: state.carousel,
+                  items: state.items,
+                  activeItemId: action.itemId,
+                  dismissX: 0,
+                  dismissY: 0,
+                  dismissVx: 0,
+                  dismissVy: 0,
+                  dismissPivotX: action.pointerX,
+                  dismissPivotY: action.pointerY,
+                  lastUpdatedAt: action.timestamp,
+                };
+              }
+            }
             return state;
+          }
           case "toggle-zoom": {
             if (action.itemId === undefined) return state;
             const item = state.items[action.itemId];
@@ -572,6 +723,93 @@ function createCarouselReduce(config: CarouselConfig) {
           }
         }
         throw new Error("unreachable");
+      }
+
+      case "dismissing": {
+        switch (action.type) {
+          case "motion": {
+            if (action.itemId !== state.activeItemId) return state;
+            const dtMs = computeDtMs(state.lastUpdatedAt, action.timestamp);
+            const dismissX = state.dismissX + action.dx;
+            const dismissY = state.dismissY + action.dy;
+            return {
+              ...state,
+              dismissX,
+              dismissY,
+              dismissVx: dtMs > 0 ? action.dx / dtMs : state.dismissVx,
+              dismissVy: dtMs > 0 ? action.dy / dtMs : state.dismissVy,
+              lastUpdatedAt: action.timestamp,
+            };
+          }
+          case "release": {
+            const projectedY = state.dismissY + state.dismissVy / INERTIA_DECAY;
+            if (Math.abs(projectedY) > state.itemHeight * 0.5) {
+              return {
+                type: "dismissed",
+                itemWidth: state.itemWidth,
+                itemHeight: state.itemHeight,
+                itemIds: state.itemIds,
+                carousel: state.carousel,
+                items: state.items,
+                activeItemId: state.activeItemId,
+                dismissX: state.dismissX,
+                dismissY: state.dismissY,
+                dismissPivotX: state.dismissPivotX,
+                dismissPivotY: state.dismissPivotY,
+              };
+            }
+            const activeItem = state.items[state.activeItemId];
+            const snapScale = deriveDismissScale(
+              state.dismissY,
+              state.itemHeight,
+            );
+            return {
+              type: "free",
+              itemWidth: state.itemWidth,
+              itemHeight: state.itemHeight,
+              itemIds: state.itemIds,
+              carousel: state.carousel,
+              items: {
+                ...state.items,
+                [state.activeItemId]: {
+                  type: "snapping" as const,
+                  bounds: activeItem?.bounds ?? {
+                    elementWidth: state.itemWidth,
+                    elementHeight: state.itemHeight,
+                    left: 0,
+                    right: state.itemWidth,
+                    top: 0,
+                    bottom: state.itemHeight,
+                  },
+                  transform: {
+                    x: state.dismissX + state.dismissPivotX * (1 - snapScale),
+                    y: state.dismissY + state.dismissPivotY * (1 - snapScale),
+                    scale: snapScale,
+                  },
+                  lastUpdatedAt: state.lastUpdatedAt,
+                  target: { x: 0, y: 0, scale: 1 },
+                },
+              },
+            };
+          }
+          case "slop":
+          case "toggle-zoom":
+            return state;
+          case "tick": {
+            const carousel = carouselReduce(state.carousel, action);
+            const items = advanceAllItems(state.items, action.timestamp);
+            if (carousel === state.carousel && items === state.items)
+              return state;
+            return { ...state, carousel, items };
+          }
+        }
+        throw new Error("unreachable");
+      }
+
+      case "dismissed": {
+        // Returning the same reference satisfies the reference-equality contract,
+        // keeping the animation loop paused until the component unmounts.
+        return state;
       }
     }
   };
