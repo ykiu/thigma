@@ -207,6 +207,17 @@ export function ScalableCarouselContainer({
       }
       if (state.isDismissed && !prevState.isDismissed) {
         onDismissRef.current?.();
+        // Reset to free so the carousel is usable when the dialog re-opens.
+        // Without this, if selectedItemId doesn't change, useLayoutEffect won't
+        // re-dispatch navigate-to and the carousel stays stuck in dismissed.
+        const index = Math.round(
+          -state.carouselTranslateX / itemWidthRef.current,
+        );
+        const clamped = Math.max(
+          0,
+          Math.min(itemIdsRef.current.length - 1, index),
+        );
+        s.dispatch({ type: "navigate-to", index: clamped });
       }
       if (state.dismissProgress !== prevState.dismissProgress) {
         onDismissProgressRef.current?.(state.dismissProgress);
