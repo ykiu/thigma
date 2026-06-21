@@ -89,6 +89,8 @@ export type CarouselPrivateState =
       dismissY: number;
       dismissVx: number;
       dismissVy: number;
+      dismissPivotX: number;
+      dismissPivotY: number;
       lastUpdatedAt: number;
     }
   | {
@@ -101,6 +103,8 @@ export type CarouselPrivateState =
       activeItemId: string;
       dismissX: number;
       dismissY: number;
+      dismissPivotX: number;
+      dismissPivotY: number;
     };
 
 type MotionEvent = Extract<TransformAction, { type: "motion" }>;
@@ -153,17 +157,25 @@ function toCarouselPublicState(
   state: CarouselPrivateState,
 ): CarouselPublicState {
   if (state.type === "dismissed") {
-    const { activeItemId, dismissX, dismissY, itemHeight } = state;
+    const {
+      activeItemId,
+      dismissX,
+      dismissY,
+      dismissPivotX,
+      dismissPivotY,
+      itemHeight,
+    } = state;
     const items: Record<
       string,
       { transformX: number; transformY: number; scale: number }
     > = {};
     for (const [id, item] of Object.entries(state.items)) {
       if (id === activeItemId) {
+        const scale = deriveDismissScale(dismissY, itemHeight);
         items[id] = {
-          transformX: dismissX,
-          transformY: dismissY,
-          scale: deriveDismissScale(dismissY, itemHeight),
+          transformX: dismissX + dismissPivotX * (1 - scale),
+          transformY: dismissY + dismissPivotY * (1 - scale),
+          scale,
         };
       } else {
         items[id] = {
@@ -183,17 +195,25 @@ function toCarouselPublicState(
   }
 
   if (state.type === "dismissing") {
-    const { activeItemId, dismissX, dismissY, itemHeight } = state;
+    const {
+      activeItemId,
+      dismissX,
+      dismissY,
+      dismissPivotX,
+      dismissPivotY,
+      itemHeight,
+    } = state;
     const items: Record<
       string,
       { transformX: number; transformY: number; scale: number }
     > = {};
     for (const [id, item] of Object.entries(state.items)) {
       if (id === activeItemId) {
+        const scale = deriveDismissScale(dismissY, itemHeight);
         items[id] = {
-          transformX: dismissX,
-          transformY: dismissY,
-          scale: deriveDismissScale(dismissY, itemHeight),
+          transformX: dismissX + dismissPivotX * (1 - scale),
+          transformY: dismissY + dismissPivotY * (1 - scale),
+          scale,
         };
       } else {
         items[id] = {
@@ -553,6 +573,8 @@ function createCarouselReduce(config: CarouselConfig) {
                   dismissY: 0,
                   dismissVx: 0,
                   dismissVy: 0,
+                  dismissPivotX: action.pointerX,
+                  dismissPivotY: action.pointerY,
                   lastUpdatedAt: action.timestamp,
                 };
               }
@@ -732,9 +754,15 @@ function createCarouselReduce(config: CarouselConfig) {
                 activeItemId: state.activeItemId,
                 dismissX: state.dismissX,
                 dismissY: state.dismissY,
+                dismissPivotX: state.dismissPivotX,
+                dismissPivotY: state.dismissPivotY,
               };
             }
             const activeItem = state.items[state.activeItemId];
+            const snapScale = deriveDismissScale(
+              state.dismissY,
+              state.itemHeight,
+            );
             return {
               type: "free",
               itemWidth: state.itemWidth,
@@ -754,9 +782,9 @@ function createCarouselReduce(config: CarouselConfig) {
                     bottom: state.itemHeight,
                   },
                   transform: {
-                    x: state.dismissX,
-                    y: state.dismissY,
-                    scale: deriveDismissScale(state.dismissY, state.itemHeight),
+                    x: state.dismissX + state.dismissPivotX * (1 - snapScale),
+                    y: state.dismissY + state.dismissPivotY * (1 - snapScale),
+                    scale: snapScale,
                   },
                   lastUpdatedAt: state.lastUpdatedAt,
                   target: { x: 0, y: 0, scale: 1 },

@@ -1189,6 +1189,8 @@ describe("createCarouselModel", () => {
   function makeDismissingState(
     dismissY = 0,
     dismissVy = 0,
+    dismissPivotX = 0,
+    dismissPivotY = 0,
   ): CarouselPrivateState {
     return {
       type: "dismissing",
@@ -1206,6 +1208,8 @@ describe("createCarouselModel", () => {
       dismissY,
       dismissVx: 0,
       dismissVy,
+      dismissPivotX,
+      dismissPivotY,
       lastUpdatedAt: 0,
     };
   }
@@ -1222,6 +1226,8 @@ describe("createCarouselModel", () => {
           dScale: 1,
           originX: 0,
           originY: 0,
+          pointerX: 200,
+          pointerY: 150,
           timestamp: 100,
         });
         expect(state.type).toBe("dismissing");
@@ -1229,6 +1235,8 @@ describe("createCarouselModel", () => {
           expect(state.activeItemId).toBe("a");
           expect(state.dismissX).toBe(0);
           expect(state.dismissY).toBe(0);
+          expect(state.dismissPivotX).toBe(200);
+          expect(state.dismissPivotY).toBe(150);
         }
       });
 
@@ -1243,6 +1251,8 @@ describe("createCarouselModel", () => {
           dScale: 1,
           originX: 0,
           originY: 0,
+          pointerX: 0,
+          pointerY: 0,
           timestamp: 100,
         });
         expect(after).toBe(before);
@@ -1259,6 +1269,8 @@ describe("createCarouselModel", () => {
           dScale: 1,
           originX: 0,
           originY: 0,
+          pointerX: 0,
+          pointerY: 0,
           timestamp: 100,
         });
         expect(after).toBe(before);
@@ -1291,6 +1303,8 @@ describe("createCarouselModel", () => {
           dScale: 1,
           originX: 0,
           originY: 0,
+          pointerX: 0,
+          pointerY: 0,
           timestamp: 100,
         });
         expect(after).toBe(snappingFree);
@@ -1307,6 +1321,8 @@ describe("createCarouselModel", () => {
           dScale: 1,
           originX: 0,
           originY: 0,
+          pointerX: 0,
+          pointerY: 0,
           timestamp: 100,
         });
         expect(after).toBe(before);
@@ -1377,6 +1393,8 @@ describe("createCarouselModel", () => {
           activeItemId: "a",
           dismissX: 0,
           dismissY: -400,
+          dismissPivotX: 0,
+          dismissPivotY: 0,
         };
         expect(reduce(dismissed, { type: "tick", timestamp: 100 })).toBe(
           dismissed,
@@ -1412,6 +1430,8 @@ describe("createCarouselModel", () => {
           activeItemId: "a",
           dismissX: 5,
           dismissY: -400,
+          dismissPivotX: 0,
+          dismissPivotY: 0,
         };
         const pub = publish(dismissed);
         expect(pub.isDismissed).toBe(true);
