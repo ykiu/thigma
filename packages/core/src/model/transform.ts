@@ -175,8 +175,7 @@ export function createTransformReduce(config?: TransformConfig) {
             }
             const newScale = state.transform.scale * effectiveDScale;
 
-            // Velocity tracks pan-only contribution so that the inertia tick can
-            // handle the scale-pivot effect separately without double-counting.
+            // Pan-only velocity avoids double-counting the scale-pivot effect in the inertia tick.
             const dtMs = computeDtMs(state.lastUpdatedAt, timestamp);
             const pivoted = applyScalePivot(
               state.transform,

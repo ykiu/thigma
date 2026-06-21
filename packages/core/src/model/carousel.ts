@@ -40,15 +40,6 @@ export type CarouselAction =
 // Internal types
 // ---------------------------------------------------------------------------
 
-/**
- * Carousel-level phase.
- *
- *   free          — no active gesture; animations may still be running.
- *   carousel      — gesture is scrolling the carousel strip.
- *   items         — gesture is targeting activeItemId for pan/zoom.
- *
- * tick advances both carousel and items animations in every phase.
- */
 export type CarouselPrivateState =
   | {
       type: "free";

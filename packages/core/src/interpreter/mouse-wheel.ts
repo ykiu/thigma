@@ -6,12 +6,8 @@ import type {
   UnsubscribeFn,
 } from "../types.js";
 
-// Pixels per wheel "line" unit (for deltaMode LINE)
 const LINE_HEIGHT = 16;
-// Pixels per wheel "page" unit (for deltaMode PAGE)
 const PAGE_HEIGHT = 600;
-
-// Scale factor per pixel of wheel delta
 const SCALE_PER_PIXEL = 0.002;
 
 export function mouseWheelInterpreter(): Interpreter {
@@ -46,6 +42,8 @@ export function mouseWheelInterpreter(): Interpreter {
         originX,
         originY,
       });
+      // Zero-delta motion before release resets velocity to zero so inertia
+      // does not carry over between discrete wheel events.
       emit({
         type: "motion",
         timestamp: e.timeStamp,
