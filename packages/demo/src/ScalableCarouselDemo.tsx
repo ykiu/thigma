@@ -1,3 +1,4 @@
+import type React from "react";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -40,6 +41,8 @@ export function ScalableCarouselDemo() {
     const { id } = items[index];
     const gridImg = gridImgRefs.current.get(id);
     const carouselImg = carouselImgRefs.current.get(id);
+
+    dialogRef.current?.style.setProperty("--dismiss-progress", "0");
 
     if (!document.startViewTransition) {
       setSelectedItemId(id);
@@ -133,6 +136,9 @@ export function ScalableCarouselDemo() {
 
             object-fit: cover;
           }
+          dialog::backdrop {
+            background: rgba(0, 0, 0, calc(0.6 * (1 - var(--dismiss-progress, 0))));
+          }
           `}
       </style>
       <div className="grid grid-cols-3 gap-2">
@@ -160,7 +166,12 @@ export function ScalableCarouselDemo() {
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: <dialog> natively closes on Escape */}
       <dialog
         ref={dialogRef}
-        className="bg-gray-900 p-0 max-w-none max-h-none w-screen h-screen backdrop:bg-black/60"
+        className="bg-gray-900 p-0 max-w-none max-h-none w-screen h-screen"
+        style={
+          {
+            "--dismiss-progress": "0",
+          } as React.CSSProperties
+        }
         onClick={handleBackdropClick}
       >
         <div className="flex flex-col h-full">
@@ -180,6 +191,13 @@ export function ScalableCarouselDemo() {
               itemHeight={ITEM_HEIGHT}
               selectedItemId={selectedItemId}
               onSelectedItemIdChange={setSelectedItemId}
+              onDismiss={closeModal}
+              onDismissProgress={(progress) => {
+                dialogRef.current?.style.setProperty(
+                  "--dismiss-progress",
+                  String(progress),
+                );
+              }}
             >
               {items.map(({ id, photoId }) => (
                 <ScalableCarouselItem

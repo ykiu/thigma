@@ -193,6 +193,7 @@ type CarouselConfig = {
   itemWidth: number;            // item container width (px)
   itemHeight: number;           // item container height (px)
   itemIds: readonly string[];   // ordered list of item identifiers
+  dismissible?: boolean;        // default false; gates slop → dismissing transition
 };
 
 type CarouselAction =
@@ -205,18 +206,35 @@ Dispatching `set-config` updates the item list while preserving carousel animati
 
 Dispatching `navigate-to` immediately moves the carousel strip to the given item index (clamped to the valid range), cancelling any in-progress gesture or animation. The model transitions to the `free` state.
 
+The public state includes a discriminated dismiss union:
+
+```typescript
+type CarouselPublicState = {
+  isCarouselSettled: boolean;
+  carouselTranslateX: number;
+  items: Record<string, { transformX: number; transformY: number; scale: number }>;
+} & (
+  | { isDismissed: false; dismissProgress: number }
+  | { isDismissed: true; dismissProgress: 1 }
+);
+```
+
 The private state is a tagged union that tracks whether a gesture is targeting the carousel strip or an individual item:
 
 ```typescript
 type CarouselPrivateState =
-  | { type: "free";     itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
-  | { type: "carousel"; itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
-  | { type: "items";    itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string };
+  | { type: "free";       itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
+  | { type: "carousel";   itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> }
+  | { type: "items";      itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string }
+  | { type: "dismissing"; itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState>; activeItemId: string; dismissX: number; dismissY: number; dismissVx: number; dismissVy: number; lastUpdatedAt: number }
+  | { type: "dismissed";  itemIds: ...; carousel: TransformPrivateState; items: Record<string, TransformPrivateState> };
 ```
 
 - **free** — no active gesture; animations may still be running on carousel or items.
 - **carousel** — gesture is scrolling the carousel strip.
 - **items** — gesture is targeting `activeItemId` for pan/zoom.
+- **dismissing** — user is actively swiping up/down to dismiss; position tracked in flat fields (not `TransformPrivateState`) because dismiss motion has no bounds and scale is derived from `y`.
+- **dismissed** — user released past the dismiss threshold; terminal state until the component unmounts.
 
 Tick advances both carousel and items animations in every phase.
 

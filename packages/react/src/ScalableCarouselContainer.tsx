@@ -126,6 +126,8 @@ type Props = {
   itemHeight: number;
   selectedItemId?: string;
   onSelectedItemIdChange?: (itemId: string) => void;
+  onDismiss?: () => void;
+  onDismissProgress?: (progress: number) => void;
   className?: string;
 };
 
@@ -145,6 +147,8 @@ export function ScalableCarouselContainer({
   itemHeight,
   selectedItemId,
   onSelectedItemIdChange,
+  onDismiss,
+  onDismissProgress,
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
@@ -166,6 +170,12 @@ export function ScalableCarouselContainer({
   const onSelectedItemIdChangeRef = useRef(onSelectedItemIdChange);
   onSelectedItemIdChangeRef.current = onSelectedItemIdChange;
 
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  const onDismissProgressRef = useRef(onDismissProgress);
+  onDismissProgressRef.current = onDismissProgress;
+
   const itemIdsKey = itemIds.join(",");
 
   useEffect(() => {
@@ -174,6 +184,7 @@ export function ScalableCarouselContainer({
         itemWidth: itemWidthRef.current,
         itemHeight: itemHeightRef.current,
         itemIds: itemIdsRef.current,
+        dismissible: !!onDismissRef.current,
       }),
     );
 
@@ -194,6 +205,12 @@ export function ScalableCarouselContainer({
         const id = itemIdsRef.current[clamped];
         if (id !== undefined) onSelectedItemIdChangeRef.current?.(id);
       }
+      if (state.isDismissed && !prevState.isDismissed) {
+        onDismissRef.current?.();
+      }
+      if (state.dismissProgress !== prevState.dismissProgress) {
+        onDismissProgressRef.current?.(state.dismissProgress);
+      }
     });
 
     return () => {
@@ -211,6 +228,7 @@ export function ScalableCarouselContainer({
         itemWidth: itemWidthRef.current,
         itemHeight: itemHeightRef.current,
         itemIds: itemIdsRef.current,
+        dismissible: !!onDismissRef.current,
       },
     });
   }, [store, itemWidth, itemHeight, itemIdsKey]);
