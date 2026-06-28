@@ -9,8 +9,10 @@ import {
 } from "@mimosa/core";
 import { ScalableCarouselContainer, ScalableCarouselItem } from "@mimosa/react";
 
-const ITEM_WIDTH = 400;
-const ITEM_HEIGHT = 500;
+const ITEM_WIDTH = '100%';
+const ITEM_HEIGHT = '100%';
+const ITEM_SOURCE_WIDTH = 300;
+const ITEM_SOURCE_HEIGHT = 400;
 
 const INITIAL_ITEMS = [
   { id: "photo-1", photoId: "10" },
@@ -185,8 +187,9 @@ export function ScalableCarouselDemo() {
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center overflow-hidden">
+          <div className="flex-1 flex flex-col justify-center overflow-hidden px">
             <ScalableCarouselContainer
+              className="h-full"
               itemWidth={ITEM_WIDTH}
               itemHeight={ITEM_HEIGHT}
               selectedItemId={selectedItemId}
@@ -210,16 +213,10 @@ export function ScalableCarouselDemo() {
                       if (el) carouselImgRefs.current.set(id, el);
                       else carouselImgRefs.current.delete(id);
                     }}
-                    src={`https://picsum.photos/id/${photoId}/${ITEM_WIDTH}/${ITEM_HEIGHT}`}
+                    src={`https://picsum.photos/id/${photoId}/${ITEM_SOURCE_WIDTH}/${ITEM_SOURCE_HEIGHT}`}
                     alt={id}
                     draggable={false}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      userSelect: "none",
-                    }}
+                    className="block w-full h-full object-contain select-none"
                   />
                 </ScalableCarouselItem>
               ))}
