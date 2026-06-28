@@ -20,17 +20,29 @@ import {
   type Interpreter,
 } from "@mimosa/core";
 
+type Dimension = number | `${number}%`;
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
 
 type CarouselContextValue = {
   store: Store<CarouselPublicState, CarouselAction>;
-  itemWidth: number;
-  itemHeight: number;
 };
 
 const CarouselContext = createContext<CarouselContextValue | null>(null);
+
+// ---------------------------------------------------------------------------
+// resolveDimension
+// ---------------------------------------------------------------------------
+
+function resolveDimension(dim: Dimension, containerSize: number): number {
+  if (typeof dim === "number") return dim;
+  const value = (containerSize * parseFloat(dim)) / 100;
+  if (!Number.isFinite(value))
+    throw new RangeError(`Invalid Dimension: "${dim}"`);
+  return value;
+}
 
 // ---------------------------------------------------------------------------
 // withItemId — tags all events from a mounted interpreter with an item ID
@@ -102,8 +114,8 @@ export function ScalableCarouselItem({
     <div
       ref={viewportRef}
       style={{
-        width: ctx?.itemWidth ?? 0,
-        height: ctx?.itemHeight ?? 0,
+        width: "var(--_carousel-item-width, 0px)",
+        height: "var(--_carousel-item-height, 0px)",
         flexShrink: 0,
         cursor: "grab",
       }}
@@ -121,8 +133,8 @@ export function ScalableCarouselItem({
 
 type Props = {
   children?: ReactNode;
-  itemWidth: number;
-  itemHeight: number;
+  itemWidth: Dimension;
+  itemHeight: Dimension;
   selectedItemId?: string;
   onSelectedItemIdChange?: (itemId: string) => void;
   onDismiss?: () => void;
@@ -151,6 +163,11 @@ export function ScalableCarouselContainer({
   className,
 }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const containerPxRef = useRef<{ width: number; height: number } | null>(null);
+  const storeRef = useRef<Store<CarouselPublicState, CarouselAction> | null>(
+    null,
+  );
   const [store, setStore] = useState<Store<
     CarouselPublicState,
     CarouselAction
@@ -160,11 +177,12 @@ export function ScalableCarouselContainer({
   const itemIdsRef = useRef<readonly string[]>(itemIds);
   itemIdsRef.current = itemIds;
 
-  const itemWidthRef = useRef(itemWidth);
-  itemWidthRef.current = itemWidth;
-
-  const itemHeightRef = useRef(itemHeight);
-  itemHeightRef.current = itemHeight;
+  const itemWidthRef = useRef<number>(0);
+  const itemHeightRef = useRef<number>(0);
+  const itemWidthDimRef = useRef<Dimension>(itemWidth);
+  const itemHeightDimRef = useRef<Dimension>(itemHeight);
+  itemWidthDimRef.current = itemWidth;
+  itemHeightDimRef.current = itemHeight;
 
   const onSelectedItemIdChangeRef = useRef(onSelectedItemIdChange);
   onSelectedItemIdChangeRef.current = onSelectedItemIdChange;
@@ -178,70 +196,141 @@ export function ScalableCarouselContainer({
   const itemIdsKey = itemIds.join(",");
 
   useEffect(() => {
-    const s = createStore(
-      createCarouselModel({
-        itemWidth: itemWidthRef.current,
-        itemHeight: itemHeightRef.current,
-        itemIds: itemIdsRef.current,
-        dismissible: !!onDismissRef.current,
-      }),
-    );
+    const el = containerRef.current;
+    if (!el) return;
 
-    setStore(s);
+    let unsubscribeStore: (() => void) | null = null;
 
-    const unsubscribe = s.subscribe((state, prevState) => {
-      if (stripRef.current) {
-        stripRef.current.style.transform = `translateX(${state.carouselTranslateX}px)`;
-      }
-      if (state.isCarouselSettled && !prevState.isCarouselSettled) {
-        const index = Math.round(
-          -state.carouselTranslateX / itemWidthRef.current,
+    function applyDimensions(
+      target: HTMLDivElement,
+      containerWidth: number,
+      containerHeight: number,
+    ) {
+      if (containerWidth === 0 || containerHeight === 0) return;
+
+      const w = resolveDimension(itemWidthDimRef.current, containerWidth);
+      const h = resolveDimension(itemHeightDimRef.current, containerHeight);
+      if (w === 0 || h === 0) return;
+
+      // Stale guard — skip when nothing changed and the store already exists
+      if (
+        w === itemWidthRef.current &&
+        h === itemHeightRef.current &&
+        storeRef.current !== null
+      )
+        return;
+
+      containerPxRef.current = {
+        width: containerWidth,
+        height: containerHeight,
+      };
+      itemWidthRef.current = w;
+      itemHeightRef.current = h;
+
+      target.style.setProperty("--_carousel-item-width", `${w}px`);
+      target.style.setProperty("--_carousel-item-height", `${h}px`);
+
+      if (!storeRef.current) {
+        const s = createStore(
+          createCarouselModel({
+            itemWidth: w,
+            itemHeight: h,
+            itemIds: itemIdsRef.current,
+            dismissible: !!onDismissRef.current,
+          }),
         );
-        const clamped = Math.max(
-          0,
-          Math.min(itemIdsRef.current.length - 1, index),
-        );
-        const id = itemIdsRef.current[clamped];
-        if (id !== undefined) onSelectedItemIdChangeRef.current?.(id);
+        storeRef.current = s;
+        unsubscribeStore = s.subscribe((state, prevState) => {
+          if (stripRef.current) {
+            stripRef.current.style.transform = `translateX(${state.carouselTranslateX}px)`;
+          }
+          if (state.isCarouselSettled && !prevState.isCarouselSettled) {
+            const index = Math.round(
+              -state.carouselTranslateX / itemWidthRef.current,
+            );
+            const clamped = Math.max(
+              0,
+              Math.min(itemIdsRef.current.length - 1, index),
+            );
+            const id = itemIdsRef.current[clamped];
+            if (id !== undefined) onSelectedItemIdChangeRef.current?.(id);
+          }
+          if (state.isDismissed && !prevState.isDismissed) {
+            onDismissRef.current?.();
+            const index = Math.round(
+              -state.carouselTranslateX / itemWidthRef.current,
+            );
+            const clamped = Math.max(
+              0,
+              Math.min(itemIdsRef.current.length - 1, index),
+            );
+            s.dispatch({ type: "navigate-to", index: clamped });
+          }
+          if (state.dismissProgress !== prevState.dismissProgress) {
+            onDismissProgressRef.current?.(state.dismissProgress);
+          }
+        });
+        setStore(s);
+      } else {
+        storeRef.current.dispatch({
+          type: "set-config",
+          config: {
+            itemWidth: w,
+            itemHeight: h,
+            itemIds: itemIdsRef.current,
+            dismissible: !!onDismissRef.current,
+          },
+        });
       }
-      if (state.isDismissed && !prevState.isDismissed) {
-        onDismissRef.current?.();
-        // Reset to free so the carousel is usable when the dialog re-opens.
-        // Without this, if selectedItemId doesn't change, useLayoutEffect won't
-        // re-dispatch navigate-to and the carousel stays stuck in dismissed.
-        const index = Math.round(
-          -state.carouselTranslateX / itemWidthRef.current,
-        );
-        const clamped = Math.max(
-          0,
-          Math.min(itemIdsRef.current.length - 1, index),
-        );
-        s.dispatch({ type: "navigate-to", index: clamped });
-      }
-      if (state.dismissProgress !== prevState.dismissProgress) {
-        onDismissProgressRef.current?.(state.dismissProgress);
-      }
+    }
+
+    const rect = el.getBoundingClientRect();
+    applyDimensions(el, rect.width, rect.height);
+
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0];
+      if (e) applyDimensions(el, e.contentRect.width, e.contentRect.height);
     });
+    ro.observe(el);
 
     return () => {
-      unsubscribe();
-      s.unmount();
+      ro.disconnect();
+      unsubscribeStore?.();
+      storeRef.current?.unmount();
+      storeRef.current = null;
+      setStore(null);
     };
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: itemIdsKey is an intentional trigger dep for itemIdsRef.current
+  // biome-ignore lint/correctness/useExhaustiveDependencies: itemIdsKey triggers itemIdsRef.current; itemWidth/itemHeight trigger itemWidthDimRef/itemHeightDimRef; storeRef.current intentionally not in deps
   useEffect(() => {
-    if (!store) return;
-    store.dispatch({
+    const s = storeRef.current;
+    if (!s) return;
+    const c = containerPxRef.current;
+    if (!c) return;
+
+    const w = resolveDimension(itemWidthDimRef.current, c.width);
+    const h = resolveDimension(itemHeightDimRef.current, c.height);
+    if (w === 0 || h === 0) return;
+
+    itemWidthRef.current = w;
+    itemHeightRef.current = h;
+    containerRef.current?.style.setProperty("--_carousel-item-width", `${w}px`);
+    containerRef.current?.style.setProperty(
+      "--_carousel-item-height",
+      `${h}px`,
+    );
+
+    s.dispatch({
       type: "set-config",
       config: {
-        itemWidth: itemWidthRef.current,
-        itemHeight: itemHeightRef.current,
+        itemWidth: w,
+        itemHeight: h,
         itemIds: itemIdsRef.current,
         dismissible: !!onDismissRef.current,
       },
     });
-  }, [store, itemWidth, itemHeight, itemIdsKey]);
+  }, [itemWidth, itemHeight, itemIdsKey]);
 
   useLayoutEffect(() => {
     if (selectedItemId === undefined || !store) return;
@@ -251,13 +340,11 @@ export function ScalableCarouselContainer({
     store.flush();
   }, [store, selectedItemId]);
 
-  const contextValue = useMemo(
-    () => (store ? { store, itemWidth, itemHeight } : null),
-    [store, itemWidth, itemHeight],
-  );
+  const contextValue = useMemo(() => (store ? { store } : null), [store]);
 
   return (
     <div
+      ref={containerRef}
       className={className}
       style={{ touchAction: "none" }}
     >
