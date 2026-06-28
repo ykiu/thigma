@@ -113,7 +113,7 @@ export function ScalableCarouselDemo() {
       <style>
         {`
           ::view-transition-group(selected-photo) {
-            animation-duration: 400ms;
+            animation-duration: 300ms;
             animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
           }
           ::view-transition-image-pair(selected-photo) {

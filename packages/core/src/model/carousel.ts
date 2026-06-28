@@ -131,8 +131,7 @@ function isHorizontalOverscroll(
 // Carousel-level helpers
 // ---------------------------------------------------------------------------
 
-// Matches the 0.99^ms decay constant used in transform.ts inertia.
-const INERTIA_DECAY = -Math.log(0.99);
+const INERTIA_DECAY = -Math.log(0.999 /* larger value: more inertia */);
 
 function computeCarouselSnapTarget(
   x: number,
@@ -140,7 +139,10 @@ function computeCarouselSnapTarget(
   itemWidth: number,
   itemCount: number,
 ): number {
-  const projected = x + velocity / INERTIA_DECAY;
+  // Contain the projected position to the nearest item boundary
+  const projected =
+    x +
+    Math.min(Math.max(velocity / INERTIA_DECAY, -itemWidth / 2), itemWidth / 2);
   const nearest = Math.round(projected / itemWidth) * itemWidth;
   return Math.max(-(itemCount - 1) * itemWidth, Math.min(0, nearest)) || 0;
 }
