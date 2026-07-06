@@ -200,12 +200,15 @@ type CarouselConfig = {
 type CarouselAction =
   | TransformAction
   | { type: "set-config"; config: CarouselConfig }
-  | { type: "navigate-to"; index: number };
+  | { type: "navigate-to"; index: number }
+  | { type: "navigate-by"; delta: number };
 ```
 
 Dispatching `set-config` updates the item list while preserving carousel animation state. The carousel strip stays anchored to the item the gesture was heading toward; deleted items lose their transform state; new items start at the neutral transform. If the active item (currently being panned/zoomed) is deleted, the model transitions immediately to the `free` state.
 
 Dispatching `navigate-to` immediately moves the carousel strip to the given item index (clamped to the valid range), cancelling any in-progress gesture or animation. The model transitions to the `free` state.
+
+Dispatching `navigate-by` starts a smooth snap to the item `delta` positions away (negative = backward), clamped to the valid range. It is only meaningful while the strip is at rest or snapping and is ignored mid-gesture. While a snap is already in progress, the step is taken relative to the snap destination so repeated dispatches accumulate. This backs prev/next buttons and arrow-key navigation in hosting applications.
 
 The public state includes a discriminated dismiss union:
 

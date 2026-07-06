@@ -1,9 +1,11 @@
 import {
   Children,
   createContext,
+  forwardRef,
   isValidElement,
   useContext,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -142,6 +144,14 @@ type Props = {
   className?: string;
 };
 
+export type ScalableCarouselContainerHandle = {
+  /**
+   * Animates the carousel to the item `delta` positions away (negative =
+   * backward), clamped to the ends. No-op during an active gesture.
+   */
+  navigateBy: (delta: number) => void;
+};
+
 function deriveItemIds(children: ReactNode): readonly string[] {
   return Children.toArray(children)
     .filter(
@@ -152,16 +162,22 @@ function deriveItemIds(children: ReactNode): readonly string[] {
     .map((child) => child.props.id);
 }
 
-export function ScalableCarouselContainer({
-  children,
-  itemWidth,
-  itemHeight,
-  selectedItemId,
-  onSelectedItemIdChange,
-  onDismiss,
-  onDismissProgress,
-  className,
-}: Props) {
+export const ScalableCarouselContainer = forwardRef<
+  ScalableCarouselContainerHandle,
+  Props
+>(function ScalableCarouselContainer(
+  {
+    children,
+    itemWidth,
+    itemHeight,
+    selectedItemId,
+    onSelectedItemIdChange,
+    onDismiss,
+    onDismissProgress,
+    className,
+  },
+  ref,
+) {
   const stripRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const containerPxRef = useRef<{ width: number; height: number } | null>(null);
@@ -340,6 +356,16 @@ export function ScalableCarouselContainer({
     store.flush();
   }, [store, selectedItemId]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      navigateBy: (delta: number) => {
+        storeRef.current?.dispatch({ type: "navigate-by", delta });
+      },
+    }),
+    [],
+  );
+
   const contextValue = useMemo(() => (store ? { store } : null), [store]);
 
   return (
@@ -355,4 +381,4 @@ export function ScalableCarouselContainer({
       </div>
     </div>
   );
-}
+});

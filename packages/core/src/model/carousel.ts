@@ -41,7 +41,8 @@ export type CarouselPublicState = {
 export type CarouselAction =
   | Exclude<TransformAction, { type: "set-bounds" }>
   | { type: "set-config"; config: CarouselConfig }
-  | { type: "navigate-to"; index: number };
+  | { type: "navigate-to"; index: number }
+  | { type: "navigate-by"; delta: number };
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -498,6 +499,36 @@ function createCarouselReduce(config: CarouselConfig) {
           lastUpdatedAt: Number.NaN,
         },
         items: state.items,
+      };
+    }
+
+    if (action.type === "navigate-by") {
+      // Only meaningful while the strip is at rest or snapping; ignored mid-gesture.
+      if (state.type !== "free" || state.itemIds.length === 0) return state;
+      const { carousel } = state;
+      // While snapping, step relative to the destination so repeated presses accumulate.
+      const baseX =
+        carousel.type === "snapping" ? carousel.target.x : carousel.transform.x;
+      const baseIndex = Math.round(-baseX / state.itemWidth);
+      const clampedIndex = Math.max(
+        0,
+        Math.min(state.itemIds.length - 1, baseIndex + action.delta),
+      );
+      const targetX = -clampedIndex * state.itemWidth;
+      if (
+        carousel.type === "snapping"
+          ? carousel.target.x === targetX
+          : carousel.transform.x === targetX
+      )
+        return state;
+      return {
+        ...state,
+        carousel: {
+          type: "snapping",
+          transform: carousel.transform,
+          lastUpdatedAt: carousel.lastUpdatedAt,
+          target: { x: targetX, y: 0, scale: 1 },
+        },
       };
     }
 

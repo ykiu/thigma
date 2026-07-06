@@ -9,8 +9,8 @@ import {
 } from "@mimosa/core";
 import { ScalableCarouselContainer, ScalableCarouselItem } from "@mimosa/react";
 
-const ITEM_WIDTH = '100%';
-const ITEM_HEIGHT = '100%';
+const ITEM_WIDTH = "100%";
+const ITEM_HEIGHT = "100%";
 const ITEM_SOURCE_WIDTH = 300;
 const ITEM_SOURCE_HEIGHT = 400;
 
