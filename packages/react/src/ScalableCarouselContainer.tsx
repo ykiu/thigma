@@ -72,9 +72,11 @@ type ScalableCarouselItemProps = {
   children?: ReactNode;
   // Frozen at mount. To swap interpreters, remount via a key change.
   interpreters: Interpreter[];
-  /** Notifies raw scale value whenever this item's published scale changes.
-      Fires potentially every frame during pinch/animation; handler must be cheap.
-      (During dismiss gesture, values < 1 also flow through.) */
+  /**
+   * Notifies raw scale value whenever this item's published scale changes.
+   * Fires potentially every frame during pinch/animation; handler must be
+   * cheap. (During dismiss gesture, values < 1 also flow through.)
+   */
   onScaleChange?: (scale: number) => void;
 };
 
@@ -385,7 +387,7 @@ export const ScalableCarouselContainer = forwardRef<
     <div
       ref={containerRef}
       className={className}
-      style={{ touchAction: "none", ...style }}
+      style={{ ...style, touchAction: "none" }}
     >
       <div ref={stripRef} style={{ display: "flex" }}>
         <CarouselContext.Provider value={contextValue}>
