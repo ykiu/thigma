@@ -152,6 +152,7 @@ type Props = {
   onDismiss?: () => void;
   onDismissProgress?: (progress: number) => void;
   className?: string;
+  style?: React.CSSProperties;
 };
 
 export type ScalableCarouselContainerHandle = {
@@ -185,6 +186,7 @@ export const ScalableCarouselContainer = forwardRef<
     onDismiss,
     onDismissProgress,
     className,
+    style,
   },
   ref,
 ) {
@@ -382,7 +384,7 @@ export const ScalableCarouselContainer = forwardRef<
     <div
       ref={containerRef}
       className={className}
-      style={{ touchAction: "none" }}
+      style={{ touchAction: "none", ...style }}
     >
       <div ref={stripRef} style={{ display: "flex" }}>
         <CarouselContext.Provider value={contextValue}>
