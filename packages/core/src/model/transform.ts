@@ -284,7 +284,6 @@ export function createTransformReduce(config?: TransformConfig) {
               if (newScale < minScale) {
                 newScale = minScale;
                 newLogVScale = 0;
-                0;
               }
             }
             const ds = newScale / state.transform.scale;
