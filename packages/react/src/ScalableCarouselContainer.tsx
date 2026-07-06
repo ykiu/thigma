@@ -71,17 +71,24 @@ type ScalableCarouselItemProps = {
   children?: ReactNode;
   // Frozen at mount. To swap interpreters, remount via a key change.
   interpreters: Interpreter[];
+  /** Notifies raw scale value whenever this item's published scale changes.
+      Fires potentially every frame during pinch/animation; handler must be cheap.
+      (During dismiss gesture, values < 1 also flow through.) */
+  onScaleChange?: (scale: number) => void;
 };
 
 export function ScalableCarouselItem({
   id,
   children,
   interpreters,
+  onScaleChange,
 }: ScalableCarouselItemProps) {
   const ctx = useContext(CarouselContext);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const interpretersRef = useRef(interpreters);
+  const onScaleChangeRef = useRef(onScaleChange);
+  onScaleChangeRef.current = onScaleChange;
 
   useEffect(() => {
     if (!ctx) return;
@@ -102,12 +109,15 @@ export function ScalableCarouselItem({
 
   useEffect(() => {
     if (!ctx) return;
-    return ctx.store.subscribe((state) => {
+    return ctx.store.subscribe((state, prevState) => {
       const el = contentRef.current;
       const itemState = state.items[id];
       if (el && itemState) {
         el.style.transform = `translate(${itemState.transformX}px, ${itemState.transformY}px) scale(${itemState.scale})`;
         el.style.transformOrigin = "0 0";
+      }
+      if (itemState && itemState.scale !== prevState.items[id]?.scale) {
+        onScaleChangeRef.current?.(itemState.scale);
       }
     });
   }, [ctx, id]);
