@@ -503,24 +503,18 @@ function createCarouselReduce(config: CarouselConfig) {
     }
 
     if (action.type === "navigate-by") {
-      // Only meaningful while the strip is at rest or snapping; ignored mid-gesture.
       if (state.type !== "free" || state.itemIds.length === 0) return state;
       const { carousel } = state;
       // While snapping, step relative to the destination so repeated presses accumulate.
       const baseX =
         carousel.type === "snapping" ? carousel.target.x : carousel.transform.x;
-      const baseIndex = Math.round(-baseX / state.itemWidth);
-      const clampedIndex = Math.max(
+      const targetX = computeCarouselSnapTarget(
+        baseX - action.delta * state.itemWidth,
         0,
-        Math.min(state.itemIds.length - 1, baseIndex + action.delta),
+        state.itemWidth,
+        state.itemIds.length,
       );
-      const targetX = -clampedIndex * state.itemWidth;
-      if (
-        carousel.type === "snapping"
-          ? carousel.target.x === targetX
-          : carousel.transform.x === targetX
-      )
-        return state;
+      if (baseX === targetX) return state;
       return {
         ...state,
         carousel: {

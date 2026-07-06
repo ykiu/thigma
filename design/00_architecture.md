@@ -208,7 +208,7 @@ Dispatching `set-config` updates the item list while preserving carousel animati
 
 Dispatching `navigate-to` immediately moves the carousel strip to the given item index (clamped to the valid range), cancelling any in-progress gesture or animation. The model transitions to the `free` state.
 
-Dispatching `navigate-by` starts a smooth snap to the item `delta` positions away (negative = backward), clamped to the valid range. It is only meaningful while the strip is at rest or snapping and is ignored mid-gesture. While a snap is already in progress, the step is taken relative to the snap destination so repeated dispatches accumulate. This backs prev/next buttons and arrow-key navigation in hosting applications.
+Dispatching `navigate-by` starts a smooth snap to the item `delta` positions away (negative = backward), clamped to the valid range. It is only meaningful while the strip is at rest or snapping and is ignored mid-gesture. While a snap is already in progress, the step is taken relative to the snap destination so repeated dispatches accumulate.
 
 The public state includes a discriminated dismiss union:
 

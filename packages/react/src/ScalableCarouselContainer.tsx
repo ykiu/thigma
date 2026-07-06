@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -152,7 +153,7 @@ type Props = {
   onDismiss?: () => void;
   onDismissProgress?: (progress: number) => void;
   className?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 };
 
 export type ScalableCarouselContainerHandle = {
