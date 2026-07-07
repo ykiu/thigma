@@ -6,13 +6,15 @@ argument-hint: 1. Declare whether you wish to review a planned code change or an
 
 ## Workflow
 
-1. Use the Explore agent to understand the relevant part of the codebase.
-2. In a single message, invoke the Agent tool in parallel — one call per principle group below. Pass each agent:
+1. When reviewing existing code, use the Explore agent to understand the relevant part of the codebase. Write the response to a temporary file.
+2. When reviewing a planned change, use the Plan agent to make a detailed implementation plan. You may skip this step only if there's a already a plan file. Write the response to a temporary file.
+3. Determine which principle groups are relevant to the change.
+4. For each relevant principle group, invoke the Agent tool in parallel — one call per principle group below. Pass each agent:
    - The user's change description (from the conversation)
-   - The codebase context gathered in step 1
+   - The path to the Explore/Plan agent result
    - The full text of the principles the agent is responsible for (quoted from the groups below)
    - The instruction: "Return your findings as a list. For each finding, state the principle violated and describe the problem. If you find no issues, return an empty list."
-3. Write the results from all agents to {{cwd}}/typescript-review-findings.md in the following format:
+5. Write the results from all agents to {{cwd}}/typescript-review-findings.local.md in the following format:
 
    ```
    ### Group X: THE_NAME_OF_THE_PRINCIPLE
@@ -22,14 +24,25 @@ argument-hint: 1. Declare whether you wish to review a planned code change or an
    ...
    ```
 
-4. Evaluate every single finding from all agents, even if they seem minor. Evaluate each finding into one of "valid", "invalid" or "out of scope". Use "out of scope" if the finding is technically correct but not relevant to the current change.
-5. Report all the findings to the user in a single message, along with your evaluation.
+6. Evaluate every single finding from all agents, even if they seem minor. Evaluate each finding into one of "valid", "invalid" or "out of scope". Use "out of scope" if the finding is technically correct but not relevant to the current change.
+7. Report all the findings to the user in a single message, along with your evaluation.
 
 - Note: Spin up exactly one agent per principle group. Do not combine multiple principle groups into a single agent.
 
 ## Principle Groups
 
-### Group 1: Type Safety
+### Group 1: Do more with less
+
+<when-to-use>Always</when-to-use>
+
+Don't try to solve the problem with more code. Instead, leverage existing abstractions.
+
+When adding a new feature: generalize existing abstractions to accommodate both existing and new use cases.
+When fixing a bug: fix the root cause, not just the symptom.
+
+### Group 2: Type Safety
+
+<when-to-use>Working on a TypeScript project</when-to-use>
 
 Make the most upstream types as strict as possible. The types of external input values are often the most upstream. If you see symptoms like the following, it's a sign to review the upstream types.
 
@@ -43,7 +56,9 @@ Instead, use a validation library like valibot.
 If the presence of one optional property of an object is related to the presence of another optional property, consider defining the type with a union.
 For example, `{ a?: string, b?: string }` is less clear than `{ type: "foo", a: string } | { type: "bar", b: string }`.
 
-### Group 2: Performance + Bundle Size
+### Group 3: Performance + Bundle Size
+
+<when-to-use>Working on a front end code</when-to-use>
 
 #### High-frequency React state updates
 
@@ -59,7 +74,9 @@ Avoid code structures that prevent tree-shaking. Prefer letting callers import a
 - Example: `interpreters: ["touch", "mouse"]` (string names) prevents tree-shaking unused interpreters
 - Fix: `interpreters: [new TouchInterpreter(), new MouseInterpreter()]` — callers instantiate and pass
 
-### Group 3: Module Dependencies
+### Group 4: Module Dependencies
+
+<when-to-use>Working on a TypeScript project</when-to-use>
 
 Run the following script to identify modules with few dependents, which may indicate that they are not widely used and could be candidates for deletion or refactoring.
 
@@ -84,6 +101,8 @@ npx --yes madge --extensions ts,tsx --ts-config tsconfig.json --json src \
 
 #### Keep exports minimal
 
+<when-to-use>Working on a TypeScript project</when-to-use>
+
 Minimize the number of exports from a module.
 
 - Example: a variable is defined in module A but only used in module B.
@@ -98,7 +117,9 @@ When adding features, do not introduce imports that violate the intended module 
 - Example: adding a React import into a React-agnostic core module
 - Fix: before implementing the feature, restructure the codebase so the dependency graph remains clean, even if that means a broader refactor. In the planning phase, treat dependency violations as blockers and refactor first.
 
-### Group 4: API Design
+### Group 5: API Design
+
+<when-to-use>Always</when-to-use>
 
 #### Unnecessary backward compatibility
 
@@ -119,8 +140,10 @@ When a bug or limitation is caused by a lower-level primitive, fix it there even
 
 - Ask: "Am I patching a symptom here, or fixing the root cause?"
 
-### Group 5: Documentation
+### Group 6: Documentation
 
-#### Keep documents minimum
+<when-to-use>Always</when-to-use>
+
+#### Keep documentation minimum
 
 Document principles that future developers must comply with. Don't document what can be inferred from the code.
