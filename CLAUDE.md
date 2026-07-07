@@ -38,9 +38,9 @@ This project uses [Changesets](https://github.com/changesets/changesets) to mana
 
 2. **Version PR** — When changesets are merged to `main`, the GitHub Actions release workflow (`release.yml`) runs `changesets/action`, which opens (or updates) a "Version Packages" pull request. This PR bumps `package.json` versions and updates `CHANGELOG.md` files based on the accumulated changesets.
 
-3. **Publish** — Merging the Version PR back to `main` triggers the workflow again. This time `changesets/action` detects that the versions have already been bumped, so it runs `npx changeset publish --provenance` to publish the packages to npm with provenance attestation.
+3. **Publish** — Merging the Version PR back to `main` triggers the workflow again. This time `changesets/action` detects that the versions have already been bumped, so it runs `npx changeset publish` to publish the packages to npm. Provenance attestation is enabled via `npm config set provenance true` in the workflow.
 
-Required repository secrets: `NPM_TOKEN` (an npm automation token with publish access).
+Publishing uses [npm trusted publishers](https://docs.npmjs.com/trusted-publishers) (OIDC) — no long-lived `NPM_TOKEN` is needed. Each package must have the trusted publisher configured on npmjs.com (Settings → Trusted Publisher → GitHub Actions, workflow: `release.yml`).
 
 ## Human Language
 
