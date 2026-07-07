@@ -24,6 +24,24 @@ When making changes to the codebase, follow this workflow:
 8. Review your implementation with the "typescript-review" skill and evaluate the feedback.
 9. Iterate on your implementation based on feedback until finalized.
 
+## Publishing
+
+This project uses [Changesets](https://github.com/changesets/changesets) to manage versioning and npm publishing.
+
+### Workflow
+
+1. **Add a changeset** after making changes to `@thigma/core` or `@thigma/react`:
+   ```
+   npx changeset
+   ```
+   Follow the interactive prompts to select the affected packages and the semver bump type (patch / minor / major), then write a short summary of the change. Commit the generated file in `.changeset/`.
+
+2. **Version PR** — When changesets are merged to `main`, the GitHub Actions release workflow (`release.yml`) runs `changesets/action`, which opens (or updates) a "Version Packages" pull request. This PR bumps `package.json` versions and updates `CHANGELOG.md` files based on the accumulated changesets.
+
+3. **Publish** — Merging the Version PR back to `main` triggers the workflow again. This time `changesets/action` detects that the versions have already been bumped, so it runs `npx changeset publish --provenance` to publish the packages to npm with provenance attestation.
+
+Required repository secrets: `NPM_TOKEN` (an npm automation token with publish access).
+
 ## Human Language
 
 Always use English to write code comments, commit messages, documentation and GitHub PRs/issues/comments.

@@ -5,7 +5,7 @@ import {
   createModel,
   type Interpreter,
   type TransformConfig,
-} from "@mimosa/core";
+} from "@thigma/core";
 
 type Props = {
   children?: ReactNode;

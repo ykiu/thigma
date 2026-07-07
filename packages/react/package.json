@@ -1,9 +1,19 @@
 {
-  "name": "@mimosa/react",
+  "name": "@thigma/react",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      }
+    }
+  },
   "scripts": {
     "build": "tsc",
     "tsc": "tsc --noEmit"
@@ -12,7 +22,7 @@
     "react": ">=18.0.0"
   },
   "dependencies": {
-    "@mimosa/core": "*"
+    "@thigma/core": "*"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

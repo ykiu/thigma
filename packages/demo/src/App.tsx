@@ -11,7 +11,7 @@ export function App() {
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       <header className="flex items-center px-4 py-3 bg-gray-800 shadow text-white shrink-0 gap-6">
-        <h1 className="text-lg font-semibold tracking-wide">Mimosa Demo</h1>
+        <h1 className="text-lg font-semibold tracking-wide">Thigma Demo</h1>
         <nav className="flex gap-2">
           <button
             type="button"

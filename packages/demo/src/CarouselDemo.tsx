@@ -2,8 +2,8 @@ import {
   touchInterpreter,
   mouseDragInterpreter,
   doubleTapInterpreter,
-} from "@mimosa/core";
-import { ScalableCarouselContainer, ScalableCarouselItem } from "@mimosa/react";
+} from "@thigma/core";
+import { ScalableCarouselContainer, ScalableCarouselItem } from "@thigma/react";
 
 const ITEM_WIDTH = 400;
 const ITEM_HEIGHT = 400;
