@@ -1,13 +1,16 @@
 import {
   Children,
   createContext,
+  forwardRef,
   isValidElement,
   useContext,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -69,17 +72,26 @@ type ScalableCarouselItemProps = {
   children?: ReactNode;
   // Frozen at mount. To swap interpreters, remount via a key change.
   interpreters: Interpreter[];
+  /**
+   * Notifies raw scale value whenever this item's published scale changes.
+   * Fires potentially every frame during pinch/animation; handler must be
+   * cheap. (During dismiss gesture, values < 1 also flow through.)
+   */
+  onScaleChange?: (scale: number) => void;
 };
 
 export function ScalableCarouselItem({
   id,
   children,
   interpreters,
+  onScaleChange,
 }: ScalableCarouselItemProps) {
   const ctx = useContext(CarouselContext);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const interpretersRef = useRef(interpreters);
+  const onScaleChangeRef = useRef(onScaleChange);
+  onScaleChangeRef.current = onScaleChange;
 
   useEffect(() => {
     if (!ctx) return;
@@ -100,12 +112,15 @@ export function ScalableCarouselItem({
 
   useEffect(() => {
     if (!ctx) return;
-    return ctx.store.subscribe((state) => {
+    return ctx.store.subscribe((state, prevState) => {
       const el = contentRef.current;
       const itemState = state.items[id];
       if (el && itemState) {
         el.style.transform = `translate(${itemState.transformX}px, ${itemState.transformY}px) scale(${itemState.scale})`;
         el.style.transformOrigin = "0 0";
+      }
+      if (itemState && itemState.scale !== prevState.items[id]?.scale) {
+        onScaleChangeRef.current?.(itemState.scale);
       }
     });
   }, [ctx, id]);
@@ -140,6 +155,15 @@ type Props = {
   onDismiss?: () => void;
   onDismissProgress?: (progress: number) => void;
   className?: string;
+  style?: CSSProperties;
+};
+
+export type ScalableCarouselContainerHandle = {
+  /**
+   * Animates the carousel to the item `delta` positions away (negative =
+   * backward), clamped to the ends. No-op during an active gesture.
+   */
+  navigateBy: (delta: number) => void;
 };
 
 function deriveItemIds(children: ReactNode): readonly string[] {
@@ -152,16 +176,23 @@ function deriveItemIds(children: ReactNode): readonly string[] {
     .map((child) => child.props.id);
 }
 
-export function ScalableCarouselContainer({
-  children,
-  itemWidth,
-  itemHeight,
-  selectedItemId,
-  onSelectedItemIdChange,
-  onDismiss,
-  onDismissProgress,
-  className,
-}: Props) {
+export const ScalableCarouselContainer = forwardRef<
+  ScalableCarouselContainerHandle,
+  Props
+>(function ScalableCarouselContainer(
+  {
+    children,
+    itemWidth,
+    itemHeight,
+    selectedItemId,
+    onSelectedItemIdChange,
+    onDismiss,
+    onDismissProgress,
+    className,
+    style,
+  },
+  ref,
+) {
   const stripRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const containerPxRef = useRef<{ width: number; height: number } | null>(null);
@@ -340,13 +371,23 @@ export function ScalableCarouselContainer({
     store.flush();
   }, [store, selectedItemId]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      navigateBy: (delta: number) => {
+        storeRef.current?.dispatch({ type: "navigate-by", delta });
+      },
+    }),
+    [],
+  );
+
   const contextValue = useMemo(() => (store ? { store } : null), [store]);
 
   return (
     <div
       ref={containerRef}
       className={className}
-      style={{ touchAction: "none" }}
+      style={{ ...style, touchAction: "none" }}
     >
       <div ref={stripRef} style={{ display: "flex" }}>
         <CarouselContext.Provider value={contextValue}>
@@ -355,4 +396,4 @@ export function ScalableCarouselContainer({
       </div>
     </div>
   );
-}
+});

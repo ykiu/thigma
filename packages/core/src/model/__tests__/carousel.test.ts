@@ -1158,6 +1158,72 @@ describe("createCarouselModel", () => {
   });
 
   // -------------------------------------------------------------------------
+  // navigate-by
+  // -------------------------------------------------------------------------
+
+  describe("navigate-by", () => {
+    it("starts a smooth snap to the next item", () => {
+      const reduce = makeReduce();
+      const next = reduce(free(), { type: "navigate-by", delta: 1 });
+      expect(next.type).toBe("free");
+      expect(next.carousel.type).toBe("snapping");
+      if (next.carousel.type === "snapping") {
+        expect(next.carousel.target.x).toBe(-ITEM_WIDTH);
+      }
+    });
+
+    it("converges and settles at the target", () => {
+      const { reduce, publish } = createCarouselModel(DEFAULT_CONFIG);
+      let state = reduce(free(), { type: "navigate-by", delta: 1 });
+      for (let t = 16; t < 2000; t += 16) {
+        state = reduce(state, { type: "tick", timestamp: t });
+      }
+      const pub = publish(state);
+      expect(pub.isCarouselSettled).toBe(true);
+      expect(pub.carouselTranslateX).toBe(-ITEM_WIDTH);
+    });
+
+    it("clamps at the last item", () => {
+      const reduce = makeReduce();
+      const state = free(-(ITEM_IDS.length - 1) * ITEM_WIDTH);
+      // Reference equality: no-op keeps the animation loop paused.
+      expect(reduce(state, { type: "navigate-by", delta: 1 })).toBe(state);
+    });
+
+    it("clamps at the first item", () => {
+      const reduce = makeReduce();
+      const state = free();
+      expect(reduce(state, { type: "navigate-by", delta: -1 })).toBe(state);
+    });
+
+    it("accumulates from the snap target while snapping", () => {
+      const reduce = makeReduce();
+      let state = reduce(free(), { type: "navigate-by", delta: 1 });
+      state = reduce(state, { type: "tick", timestamp: 16 }); // mid-animation
+      state = reduce(state, { type: "navigate-by", delta: 1 });
+      expect(state.carousel.type).toBe("snapping");
+      if (state.carousel.type === "snapping") {
+        expect(state.carousel.target.x).toBe(-2 * ITEM_WIDTH);
+      }
+    });
+
+    it("is ignored during an item gesture", () => {
+      const reduce = makeReduce();
+      const state = makeItemsState();
+      expect(reduce(state, { type: "navigate-by", delta: 1 })).toBe(state);
+    });
+
+    it("is a no-op with empty itemIds", () => {
+      const { reduce } = createCarouselModel({
+        ...DEFAULT_CONFIG,
+        itemIds: [],
+      });
+      const state = reduce(undefined, { type: "tick", timestamp: 0 });
+      expect(reduce(state, { type: "navigate-by", delta: 1 })).toBe(state);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // publish
   // -------------------------------------------------------------------------
 
