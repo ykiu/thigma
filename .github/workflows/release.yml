@@ -21,9 +21,10 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
+      - run: npm config set provenance true
       - uses: changesets/action@v1
         with:
-          publish: npx changeset publish --provenance
+          publish: npx changeset publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
