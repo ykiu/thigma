@@ -2,15 +2,18 @@
   "name": "@thigma/core",
   "version": "0.1.0",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+  "main": "./src/index.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      }
     }
   },
-  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "tsc": "tsc --noEmit",
