@@ -2,8 +2,8 @@ import {
   touchInterpreter,
   mouseDragInterpreter,
   mouseWheelInterpreter,
-} from "@mimosa/core";
-import { PinchPanContainer } from "@mimosa/react";
+} from "@thigma/core";
+import { PinchPanContainer } from "@thigma/react";
 
 const IMAGE_URL = "https://picsum.photos/id/599/400/300";
 

@@ -1,5 +1,5 @@
 {
-  "name": "mimosa",
+  "name": "thigma",
   "private": true,
   "workspaces": [
     "packages/*"

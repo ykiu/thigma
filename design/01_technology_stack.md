@@ -6,15 +6,15 @@ This project uses a monorepo structure to manage the library and the demo applic
 
 | Package | Role |
 |---------|------|
-| `@mimosa/core` | Framework-agnostic gesture library |
-| `@mimosa/react` | React component wrappers around `@mimosa/core` |
-| `@mimosa/demo` | Demo application for manual testing |
+| `@thigma/core` | Framework-agnostic gesture library |
+| `@thigma/react` | React component wrappers around `@thigma/core` |
+| `@thigma/demo` | Demo application for manual testing |
 
 ## Directory Structure
 
 ```
 packages/
-  core/                  # @mimosa/core
+  core/                  # @thigma/core
     src/
       interpreter/
         touch.ts
@@ -35,7 +35,7 @@ packages/
       types.ts           # InterpreterEvent, State, and common primitive types
     package.json
     tsconfig.json
-  react/                 # @mimosa/react
+  react/                 # @thigma/react
     src/
       PinchPanContainer.tsx
       CarouselContainer.tsx
@@ -43,7 +43,7 @@ packages/
       index.ts
     package.json
     tsconfig.json
-  demo/                  # @mimosa/demo
+  demo/                  # @thigma/demo
     src/
     package.json
     tsconfig.json
@@ -55,11 +55,11 @@ package.json             # workspace root
 - Common
   - TypeScript
   - Vite
-- `@mimosa/core`
+- `@thigma/core`
   - Vitest
-- `@mimosa/react`
+- `@thigma/react`
   - React (peer dependency)
-- `@mimosa/demo`
+- `@thigma/demo`
   - React
   - Tailwind CSS
   - The demo is UI-focused and does not include automated tests.

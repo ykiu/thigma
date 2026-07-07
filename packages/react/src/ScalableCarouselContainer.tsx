@@ -21,7 +21,7 @@ import {
   type CarouselAction,
   type CarouselPublicState,
   type Interpreter,
-} from "@mimosa/core";
+} from "@thigma/core";
 
 type Dimension = number | `${number}%`;
 
